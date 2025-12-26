@@ -76,6 +76,24 @@ public class MP_QR_HIBRIDO implements IscobolCall {
                     logger.info("---> REFUND_ORDER (R)");
                     resultado = refundOrder(argv);
                     break;
+                case "S":
+                    logger.info("---> CREATE_STORE (S)");
+                    resultado = createStore(argv);
+                    break;
+
+                case "P":
+                    logger.info("---> CREATE_POS (P)");
+                    resultado = createPos(argv);
+                    break;
+                case "LS":
+                    logger.info("---> SEARCH_STORES (LS)");
+                    resultado = searchStores(argv);
+                    break;
+
+                case "LP":
+                    logger.info("---> SEARCH_POS (LP)");
+                    resultado = searchPos(argv);
+                    break;
 
                 default:
                     logger.info("---> Accion invalida: " + accion);
@@ -562,7 +580,209 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         }
     }
 
+    private int createStore(CobolVar[] argv) {
+
+        String pathProperties = getStr(argv, 10);
+        String reqJson = getStr(argv, 18); // <-- ENTRADA: JSON store
+        String idempotencyKey = getStr(argv, 11);
+
+        if (!isBlank(pathProperties)) {
+            System.setProperty("mp.config", pathProperties);
+        }
+        if (isBlank(reqJson)) {
+            return fail(argv, 1, "Falta JSON de sucursal en argv[18] (AR-MP-RAW-JSON-MPQ)");
+        }
+        if (isBlank(idempotencyKey)) {
+            idempotencyKey = "STORE-" + System.currentTimeMillis();
+        }
+
+        MpConfig cfg = MpConfig.load();
+        MpHttpClient http = new MpHttpClient(cfg);
+
+        String userId = cfg.userId(); // debe resolver test/pro según mp.etapa
+        String endpointFmt = cfg.get("mp.endpoint.createStore", "/users/%s/stores");
+        String endpoint = String.format(endpointFmt, userId);
+
+        logger.info("POST " + endpoint);
+        logger.info("X-Idempotency-Key: " + idempotencyKey);
+        logger.info("REQ " + reqJson);
+
+        try {
+            MpHttpClient.MpHttpResponse r = http.postJson(endpoint, reqJson, idempotencyKey);
+
+            logger.info("HTTP " + r.statusCode);
+            logger.info("RESP " + r.body);
+
+            if (!r.is2xx()) {
+                return fail(argv, 4, "CREATE_STORE: HTTP " + r.statusCode + " - " + r.body);
+            }
+
+            JsonObject mp = GSON.fromJson(r.body, JsonObject.class);
+            String storeId = getJsonStr(mp, "id"); // normalmente el store creado trae id
+
+            setOut(argv, 12, "0");
+            setOut(argv, 13, "Sucursal creada OK");
+            setOut(argv, 14, nvl(storeId)); // reutilizamos AR-MP-ORDER-ID-MPQ como "id creado"
+            setOut(argv, 18, r.body);
+
+            return 0;
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error createStore: " + e.getMessage(), e);
+            return fail(argv, 5, "Excepción: " + e.getMessage());
+        }
+    }
+
+    private int createPos(CobolVar[] argv) {
+
+        String pathProperties = getStr(argv, 10);
+        String reqJson = getStr(argv, 18); // <-- ENTRADA: JSON pos
+        String idempotencyKey = getStr(argv, 11);
+
+        if (!isBlank(pathProperties)) {
+            System.setProperty("mp.config", pathProperties);
+        }
+        if (isBlank(reqJson)) {
+            return fail(argv, 1, "Falta JSON de caja/POS en argv[18] (AR-MP-RAW-JSON-MPQ)");
+        }
+        if (isBlank(idempotencyKey)) {
+            idempotencyKey = "POS-" + System.currentTimeMillis();
+        }
+
+        MpConfig cfg = MpConfig.load();
+        MpHttpClient http = new MpHttpClient(cfg);
+
+        String endpoint = cfg.get("mp.endpoint.createPos", "/pos");
+
+        logger.info("POST " + endpoint);
+        logger.info("X-Idempotency-Key: " + idempotencyKey);
+        logger.info("REQ " + reqJson);
+
+        try {
+            MpHttpClient.MpHttpResponse r = http.postJson(endpoint, reqJson, idempotencyKey);
+
+            logger.info("HTTP " + r.statusCode);
+            logger.info("RESP " + r.body);
+
+            if (!r.is2xx()) {
+                return fail(argv, 4, "CREATE_POS: HTTP " + r.statusCode + " - " + r.body);
+            }
+
+            JsonObject mp = GSON.fromJson(r.body, JsonObject.class);
+            String posId = getJsonStr(mp, "id"); // normalmente trae id
+
+            setOut(argv, 12, "0");
+            setOut(argv, 13, "Caja/POS creada OK");
+            setOut(argv, 14, nvl(posId));
+            setOut(argv, 18, r.body);
+
+            return 0;
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error createPos: " + e.getMessage(), e);
+            return fail(argv, 5, "Excepción: " + e.getMessage());
+        }
+    }
+
+    private int searchStores(CobolVar[] argv) {
+
+        String pathProperties = getStr(argv, 10);
+        String query = getStr(argv, 18); // ENTRADA: querystring (ej: "external_id=SUCURSAL001&limit=50&offset=0")
+
+        if (!isBlank(pathProperties)) {
+            System.setProperty("mp.config", pathProperties);
+        }
+
+        MpConfig cfg = MpConfig.load();
+        MpHttpClient http = new MpHttpClient(cfg);
+
+        String userId = cfg.userId();
+
+        String endpointFmt = cfg.get("mp.endpoint.searchStores", "/users/%s/stores/search");
+        String endpoint = String.format(endpointFmt, userId);
+        endpoint = appendQuery(endpoint, query);
+
+        logger.info("GET " + endpoint);
+
+        try {
+            MpHttpClient.MpHttpResponse r = http.get(endpoint, null);
+
+            logger.info("HTTP " + r.statusCode);
+            logger.info("RESP " + r.body);
+
+            if (!r.is2xx()) {
+                return fail(argv, 4, "SEARCH_STORES: HTTP " + r.statusCode + " - " + r.body);
+            }
+
+            setOut(argv, 12, "0");
+            setOut(argv, 13, "OK");
+            setOut(argv, 18, r.body); // mp_raw_json con results/paging
+
+            return 0;
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error searchStores: " + e.getMessage(), e);
+            return fail(argv, 5, "Excepción: " + e.getMessage());
+        }
+    }
+
+    private int searchPos(CobolVar[] argv) {
+
+        String pathProperties = getStr(argv, 10);
+        String query = getStr(argv, 18); // ENTRADA: querystring (ej: "external_id=SUCURSAL001PDV001&limit=50&offset=0")
+
+        if (!isBlank(pathProperties)) {
+            System.setProperty("mp.config", pathProperties);
+        }
+
+        MpConfig cfg = MpConfig.load();
+        MpHttpClient http = new MpHttpClient(cfg);
+
+        String endpoint = cfg.get("mp.endpoint.searchPos", "/pos");
+        endpoint = appendQuery(endpoint, query);
+
+        logger.info("GET " + endpoint);
+
+        try {
+            MpHttpClient.MpHttpResponse r = http.get(endpoint, null);
+
+            logger.info("HTTP " + r.statusCode);
+            logger.info("RESP " + r.body);
+
+            if (!r.is2xx()) {
+                return fail(argv, 4, "SEARCH_POS: HTTP " + r.statusCode + " - " + r.body);
+            }
+
+            setOut(argv, 12, "0");
+            setOut(argv, 13, "OK");
+            setOut(argv, 18, r.body);
+
+            return 0;
+
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Error searchPos: " + e.getMessage(), e);
+            return fail(argv, 5, "Excepción: " + e.getMessage());
+        }
+    }
+
     // ========= helpers =========
+    private String appendQuery(String base, String queryString) {
+        if (isBlank(queryString)) {
+            return base;
+        }
+
+        String q = queryString.trim();
+        if (q.startsWith("?")) {
+            q = q.substring(1);
+        }
+
+        if (isBlank(q)) {
+            return base;
+        }
+
+        return base.contains("?") ? (base + "&" + q) : (base + "?" + q);
+    }
+
     private void initLogger() {
         try {
             if (logger == null) {

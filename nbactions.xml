@@ -10,7 +10,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:3.1.0:exec</goal>
             </goals>
             <properties>
-                <exec.vmArgs>-Dmp.config=c:\Users\NoxiePC\Documents\NetBeansProjects\mercadopagoQR\src\main\resources\mercadopagoQR.properties</exec.vmArgs>
+                <exec.vmArgs>-Dmp.config=C:\A2JTMP\mercadopagoQR\target\classes\mercadopagoQR.properties</exec.vmArgs>
                 <exec.args>${exec.vmArgs} -classpath %classpath ${exec.mainClass} ${exec.appArgs}</exec.args>
                 <exec.appArgs></exec.appArgs>
                 <exec.mainClass>com.hs.Main</exec.mainClass>
@@ -28,7 +28,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:3.1.0:exec</goal>
             </goals>
             <properties>
-                <exec.vmArgs>-Dmp.config=c:\Users\NoxiePC\Documents\NetBeansProjects\mercadopagoQR\src\main\resources\mercadopagoQR.properties -agentlib:jdwp=transport=dt_socket,server=n,address=${jpda.address}</exec.vmArgs>
+                <exec.vmArgs>-Dmp.config=C:\A2JTMP\mercadopagoQR\target\classes\mercadopagoQR.properties -agentlib:jdwp=transport=dt_socket,server=n,address=${jpda.address}</exec.vmArgs>
                 <exec.args>${exec.vmArgs} -classpath %classpath ${exec.mainClass} ${exec.appArgs}</exec.args>
                 <exec.appArgs></exec.appArgs>
                 <exec.mainClass>com.hs.Main</exec.mainClass>
@@ -47,7 +47,7 @@
                 <goal>org.codehaus.mojo:exec-maven-plugin:3.1.0:exec</goal>
             </goals>
             <properties>
-                <exec.vmArgs>-Dmp.config=c:\Users\NoxiePC\Documents\NetBeansProjects\mercadopagoQR\src\main\resources\mercadopagoQR.properties</exec.vmArgs>
+                <exec.vmArgs>-Dmp.config=C:\A2JTMP\mercadopagoQR\target\classes\mercadopagoQR.properties</exec.vmArgs>
                 <exec.args>${exec.vmArgs} -classpath %classpath ${exec.mainClass} ${exec.appArgs}</exec.args>
                 <exec.mainClass>com.hs.Main</exec.mainClass>
                 <exec.executable>java</exec.executable>
