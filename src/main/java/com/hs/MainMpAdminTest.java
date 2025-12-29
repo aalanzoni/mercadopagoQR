@@ -1,16 +1,26 @@
 package com.hs;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.hs.config.MpConfig;
+import com.hs.core.MpBridgeCore;
+import com.hs.dto.MpResult;
+import com.hs.dto.PosIn;
+import com.hs.dto.SearchIn;
+import com.hs.dto.StoreIn;
+import com.hs.http.MpHttp;
+import com.hs.http.MpHttpAdapter;
+import com.hs.http.MpHttpClient;
 
 import java.util.UUID;
 
+/**
+ * Test manual por consola de métodos de MpBridgeCore (Admin: S/LS/P/LP).
+ *
+ * Uso:
+ *   java ... com.hs.MainMpAdminTest C:\ruta\mercadopagoQR.properties
+ */
 public class MainMpAdminTest {
 
-    private static final Gson GSON = new Gson();
-
     public static void main(String[] args) {
-
         try {
             // 1) Properties: por args[0] o por -Dmp.config
             if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
@@ -18,7 +28,9 @@ public class MainMpAdminTest {
             }
 
             MpConfig cfg = MpConfig.load();
-            MpHttpClient http = new MpHttpClient(cfg);
+            MpHttpClient httpClient = new MpHttpClient(cfg);
+            MpHttp http = new MpHttpAdapter(httpClient);
+            MpBridgeCore core = new MpBridgeCore(cfg, http);
 
             // ====== Datos de prueba (cambiá a gusto) ======
             String storeExternalId = "SUCURSAL999";
@@ -27,51 +39,61 @@ public class MainMpAdminTest {
             String posName = "Caja 999";
 
             // ====== 1) CREATE_STORE ======
-            String storeReq = buildCreateStoreJson(storeName, storeExternalId);
-            String storeIdempotency = "STORE-" + UUID.randomUUID();
+            StoreIn s = new StoreIn();
+            s.name = storeName;
+            s.externalId = storeExternalId;
+            s.street = "Av Siempre Viva";
+            s.streetNumber = "123";
+            s.city = "Córdoba";
+            s.state = "Córdoba";
+            s.latitude = "-31.4167";
+            s.longitude = "-64.1833";
+            s.idempotencyKey = "STORE-" + UUID.randomUUID();
 
             System.out.println("===== CREATE_STORE =====");
-            MpHttpClient.MpHttpResponse storeResp = postCreateStore(http, cfg, storeReq, storeIdempotency);
-            System.out.println("HTTP " + storeResp.statusCode);
-            System.out.println(storeResp.body);
+            MpResult rs = core.createStore(s);
+            dump(rs);
 
-            if (!storeResp.is2xx()) {
+            if (rs.res != 0) {
                 System.out.println("ERROR creando store. Corto la prueba.");
                 return;
             }
 
-            String storeId = extractField(storeResp.body, "id");
-            if (storeId == null || storeId.trim().isEmpty()) {
+            long storeId = parseLongSafe(rs.id);
+            if (storeId <= 0) {
                 System.out.println("No pude extraer store_id del response. Corto la prueba.");
                 return;
             }
-            System.out.println("STORE_ID=" + storeId);
 
-            // ====== 2) SEARCH_STORES (traer todas las sucursales, primera página) ======
-            // Podés ajustar limit/offset.
-            String storesQuery = "limit=50&offset=0";
-
+            // ====== 2) SEARCH_STORES ======
             System.out.println("\n===== SEARCH_STORES =====");
-            MpHttpClient.MpHttpResponse searchStoresResp = getSearchStores(http, cfg, storesQuery);
-            System.out.println("HTTP " + searchStoresResp.statusCode);
-            System.out.println(searchStoresResp.body);
+            SearchIn ss = new SearchIn();
+            ss.limit = 50;
+            ss.offset = 0;
+            ss.filterExternalId = storeExternalId;
+            MpResult rls = core.searchStores(cfg.userId(), ss);
+            dump(rls);
 
             // ====== 3) CREATE_POS ======
-            String posReq = buildCreatePosJson(posName, posExternalId, storeId);
-            String posIdempotency = "POS-" + UUID.randomUUID();
-
             System.out.println("\n===== CREATE_POS =====");
-            MpHttpClient.MpHttpResponse posResp = postCreatePos(http, cfg, posReq, posIdempotency);
-            System.out.println("HTTP " + posResp.statusCode);
-            System.out.println(posResp.body);
+            PosIn p = new PosIn();
+            p.name = posName;
+            p.externalId = posExternalId;
+            p.storeId = storeId;
+            p.idempotencyKey = "POS-" + UUID.randomUUID();
+            MpResult rp = core.createPos(p);
+            dump(rp);
 
-            // ====== 4) SEARCH_POS (traer cajas / filtrar por external_id) ======
-            String posQuery = "external_id=" + urlEncode(posExternalId) + "&limit=50&offset=0";
-
+            // ====== 4) SEARCH_POS ======
             System.out.println("\n===== SEARCH_POS =====");
-            MpHttpClient.MpHttpResponse searchPosResp = getSearchPos(http, cfg, posQuery);
-            System.out.println("HTTP " + searchPosResp.statusCode);
-            System.out.println(searchPosResp.body);
+            SearchIn sp = new SearchIn();
+            sp.limit = 50;
+            sp.offset = 0;
+            sp.filterExternalId = posExternalId;
+            MpResult rlp = core.searchPos(sp);
+            dump(rlp);
+
+            httpClient.closeQuietly();
 
         } catch (Exception e) {
             System.out.println("ERROR general: " + e.getMessage());
@@ -79,93 +101,24 @@ public class MainMpAdminTest {
         }
     }
 
-    // ----------------- Calls -----------------
-
-    private static MpHttpClient.MpHttpResponse postCreateStore(MpHttpClient http, MpConfig cfg, String jsonBody, String idempotencyKey) throws Exception {
-        String userId = cfg.userId();
-        String endpointFmt = cfg.get("mp.endpoint.createStore", "/users/%s/stores");
-        String endpoint = String.format(endpointFmt, userId);
-        return http.postJson(endpoint, jsonBody, idempotencyKey);
+    private static void dump(MpResult r) {
+        System.out.println("res=" + r.res);
+        System.out.println("msg=" + r.msg);
+        System.out.println("id=" + r.id);
+        System.out.println("status=" + r.status);
+        System.out.println("payment_id=" + r.paymentId);
+        if (r.rawJson != null) {
+            String preview = r.rawJson.length() > 800 ? r.rawJson.substring(0, 800) + "..." : r.rawJson;
+            System.out.println("raw_json=" + preview);
+        }
     }
 
-    private static MpHttpClient.MpHttpResponse getSearchStores(MpHttpClient http, MpConfig cfg, String queryString) throws Exception {
-        String userId = cfg.userId();
-        String endpointFmt = cfg.get("mp.endpoint.searchStores", "/users/%s/stores/search");
-        String endpoint = String.format(endpointFmt, userId);
-        endpoint = appendQuery(endpoint, queryString);
-        return http.get(endpoint, null);
-    }
-
-    private static MpHttpClient.MpHttpResponse postCreatePos(MpHttpClient http, MpConfig cfg, String jsonBody, String idempotencyKey) throws Exception {
-        String endpoint = cfg.get("mp.endpoint.createPos", "/pos");
-        return http.postJson(endpoint, jsonBody, idempotencyKey);
-    }
-
-    private static MpHttpClient.MpHttpResponse getSearchPos(MpHttpClient http, MpConfig cfg, String queryString) throws Exception {
-        String endpoint = cfg.get("mp.endpoint.searchPos", "/pos");
-        endpoint = appendQuery(endpoint, queryString);
-        return http.get(endpoint, null);
-    }
-
-    // ----------------- JSON builders -----------------
-
-    private static String buildCreateStoreJson(String name, String externalId) {
-        // Ejemplo razonable. Ajustá dirección/geo a tu realidad.
-        JsonObject root = new JsonObject();
-        root.addProperty("name", name);
-        root.addProperty("external_id", externalId);
-
-        JsonObject loc = new JsonObject();
-        loc.addProperty("street_name", "Av Siempre Viva");
-        loc.addProperty("street_number", "123");
-        loc.addProperty("city_name", "Córdoba");
-        loc.addProperty("state_name", "Córdoba");
-        loc.addProperty("latitude", -31.4167);
-        loc.addProperty("longitude", -64.1833);
-
-        root.add("location", loc);
-
-        return GSON.toJson(root);
-    }
-
-    private static String buildCreatePosJson(String name, String externalId, String storeId) {
-        JsonObject root = new JsonObject();
-        root.addProperty("name", name);
-        root.addProperty("external_id", externalId);
-
-        // store_id suele ser numérico; si viene como string numérica, MP lo acepta normalmente.
-        // Si te diera problemas, convertimos a long y usamos addProperty con Number.
-        root.addProperty("store_id", storeId);
-
-        return GSON.toJson(root);
-    }
-
-    // ----------------- Utils -----------------
-
-    private static String appendQuery(String base, String queryString) {
-        if (queryString == null) return base;
-        String q = queryString.trim();
-        if (q.isEmpty()) return base;
-        if (q.startsWith("?")) q = q.substring(1);
-        if (q.isEmpty()) return base;
-        return base.contains("?") ? (base + "&" + q) : (base + "?" + q);
-    }
-
-    private static String extractField(String json, String field) {
+    private static long parseLongSafe(String s) {
         try {
-            JsonObject o = GSON.fromJson(json, JsonObject.class);
-            if (o != null && o.has(field) && !o.get(field).isJsonNull()) {
-                return o.get(field).getAsString();
-            }
-        } catch (Exception ignored) {}
-        return null;
-    }
-
-    private static String urlEncode(String s) {
-        try {
-            return java.net.URLEncoder.encode(s, "UTF-8");
+            if (s == null) return 0;
+            return Long.parseLong(s.trim());
         } catch (Exception e) {
-            return s;
+            return 0;
         }
     }
 }

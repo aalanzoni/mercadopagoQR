@@ -1,4 +1,4 @@
-package com.hs;
+package com.hs.config;
 
 import java.io.*;
 import java.util.Properties;

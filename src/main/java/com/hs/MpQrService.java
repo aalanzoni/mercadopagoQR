@@ -1,5 +1,7 @@
 package com.hs;
 
+import com.hs.http.MpHttpClient;
+import com.hs.config.MpConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonElement;

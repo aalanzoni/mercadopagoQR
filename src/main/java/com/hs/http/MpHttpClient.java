@@ -1,5 +1,6 @@
-package com.hs;
+package com.hs.http;
 
+import com.hs.config.MpConfig;
 import org.apache.http.Header;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.*;
