@@ -20,28 +20,19 @@ import java.util.logging.SimpleFormatter;
 /**
  * Puente ISCOBOL -> MercadoPago QR híbrido.
  *
- * CONTRATO argv (33 parámetros):
- * - ENTRADAS: argv[0..25]
- * - SALIDAS:  argv[26..32]
+ * ACCION (argv[0]): "O" = Crear Orden QR (POST /v1/orders)
  *
- * ACCION (argv[0]):
- *   "O"  = Crear Orden QR (POST /v1/orders)
- *   "Q"  = Consultar Orden (GET /v1/orders/{id})
- *   "C"  = Cancelar Orden (POST /v1/orders/{id}/cancel)
- *   "R"  = Refund (POST /v1/payments/{id}/refund)
- *   "S"  = Crear Store
- *   "P"  = Crear POS
- *   "LS" = Buscar Stores
- *   "LP" = Buscar POS
+ * ENTRADAS (accion "O"): argv[1] external_reference argv[2] description argv[3]
+ * external_pos_id argv[4] mode (dynamic/static) argv[5] expiration_time (ej:
+ * PT23M) argv[6] total_amount (string: "54.00") argv[7] unit_measure (ej:
+ * "unidad") argv[8] item_title argv[9] external_code argv[10] path_properties
+ * (ruta al mercadopago.properties) argv[11] idempotency_key (opcional; si vacío
+ * usa external_reference)
  *
- * SALIDAS (siempre):
- *   argv[26] resultado (0 OK, !=0 ERROR)
- *   argv[27] msg
- *   argv[28] order_id / id relevante (según acción)
- *   argv[29] qr_data (si aplica)
- *   argv[30] status (si aplica)
- *   argv[31] payment_id (si aplica)
- *   argv[32] mp_raw_json (recomendado COBOL: X(20000) o X(32767))
+ * SALIDAS: argv[12] resultado (0 OK, !=0 ERROR) argv[13] msg argv[14] order_id
+ * argv[15] qr_data (recomendado en COBOL: X(1024)) argv[16] status argv[17]
+ * payment_id argv[18] mp_raw_json (recomendado COBOL: X(20000) o X(32767) si
+ * da)
  */
 public class MP_QR_HIBRIDO implements IscobolCall {
 
