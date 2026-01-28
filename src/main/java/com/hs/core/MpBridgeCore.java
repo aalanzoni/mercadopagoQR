@@ -332,6 +332,17 @@ public class MpBridgeCore {
         }
     }
 
+    
+public MpResult searchStores(SearchIn in) {
+
+    String userId = cfg.userId();
+    if (isBlank(userId)) {
+        return MpResult.error(4, "Falta user_id en config");
+    }
+
+    return searchStores(userId, in);
+}
+
     public MpResult searchStores(String userId, SearchIn in) {
 
         int limit = (in != null && in.limit > 0) ? in.limit : 50;

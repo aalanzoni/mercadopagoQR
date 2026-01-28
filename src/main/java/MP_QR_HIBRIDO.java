@@ -1,11 +1,9 @@
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.hs.bridge.MpOutWriter;
-import com.hs.config.MpConfig;
 import com.hs.core.MpBridgeCore;
 import com.hs.dto.MpResult;
+import com.hs.config.MpConfig;
 import com.hs.http.MpHttp;
 import com.hs.http.MpHttpAdapter;
 import com.hs.http.MpHttpClient;
@@ -20,32 +18,21 @@ import java.util.logging.SimpleFormatter;
 /**
  * Puente ISCOBOL -> MercadoPago QR híbrido.
  *
- * CONTRATO argv (33 parámetros):
- * - ENTRADAS: argv[0..25]
- * - SALIDAS:  argv[26..32]
+ * CONTRATO argv (33 parámetros): - ENTRADAS: argv[0..25] - SALIDAS:
+ * argv[26..32]
  *
- * ACCION (argv[0]):
- *   "O"  = Crear Orden QR (POST /v1/orders)
- *   "Q"  = Consultar Orden (GET /v1/orders/{id})
- *   "C"  = Cancelar Orden (POST /v1/orders/{id}/cancel)
- *   "R"  = Refund (POST /v1/payments/{id}/refund)
- *   "S"  = Crear Store
- *   "P"  = Crear POS
- *   "LS" = Buscar Stores
- *   "LP" = Buscar POS
+ * ACCION (argv[0]): "O" = Crear Orden QR (POST /v1/orders) "Q" = Consultar
+ * Orden (GET /v1/orders/{id}) "C" = Cancelar Orden (POST
+ * /v1/orders/{id}/cancel) "R" = Refund (POST /v1/payments/{id}/refund) "S" =
+ * Crear Store "P" = Crear POS "LS" = Buscar Stores "LP" = Buscar POS
  *
- * SALIDAS (siempre):
- *   argv[26] resultado (0 OK, !=0 ERROR)
- *   argv[27] msg
- *   argv[28] order_id / id relevante (según acción)
- *   argv[29] qr_data (si aplica)
- *   argv[30] status (si aplica)
- *   argv[31] payment_id (si aplica)
- *   argv[32] mp_raw_json (recomendado COBOL: X(20000) o X(32767))
+ * SALIDAS (siempre): argv[26] resultado (0 OK, !=0 ERROR) argv[27] msg argv[28]
+ * order_id / id relevante (según acción) argv[29] qr_data (si aplica) argv[30]
+ * status (si aplica) argv[31] payment_id (si aplica) argv[32] mp_raw_json
+ * (recomendado COBOL: X(20000) o X(32767))
  */
 public class MP_QR_HIBRIDO implements IscobolCall {
 
-    private static final Gson GSON = new Gson();
     private MpBridgeCore core;
     private static Logger logger;
     private Handler fh;
@@ -193,227 +180,32 @@ public class MP_QR_HIBRIDO implements IscobolCall {
 
     private int createOrder(CobolVar[] argv) {
 
-        // Entradas
-        String externalReference = getStr(argv, 1);
-        String description = getStr(argv, 2);
-        String externalPosId = getStr(argv, 3);
-        String mode = getStr(argv, 4);
-        String expirationTime = getStr(argv, 5);
-        String totalAmount = getStr(argv, 6); // STRING
-        String unitMeasure = getStr(argv, 7);
-        String itemTitle = getStr(argv, 8);
-        String externalCode = getStr(argv, 9);
-        String pathProperties = getStr(argv, 10);
-        String idempotencyKey = getStr(argv, 11);
+        com.hs.dto.OrderIn in = new com.hs.dto.OrderIn();
+        in.externalReference = getStr(argv, I_EXT_REF);
+        in.description = getStr(argv, I_DESC);
+        in.externalPosId = getStr(argv, I_EXT_POS);
+        in.mode = getStr(argv, I_MODO);
+        in.expirationTime = getStr(argv, I_EXP);
+        in.totalAmount = getStr(argv, I_TOTAL);
+        in.unitMeasure = getStr(argv, I_UNIT);
+        in.itemTitle = getStr(argv, I_ITEM);
+        in.externalCode = getStr(argv, I_EXT_CODE);
+        in.idempotencyKey = getStr(argv, I_IDEMPOTENCY);
 
-        // Validaciones mínimas
-        if (isBlank(externalReference)) {
-            return fail(argv, 1, "Falta external_reference (argv[1])");
-        }
-        if (isBlank(externalPosId)) {
-            return fail(argv, 2, "Falta external_pos_id (argv[3])");
-        }
-        if (isBlank(totalAmount)) {
-            return fail(argv, 3, "Falta total_amount (argv[6])");
-        }
-        if (isBlank(itemTitle)) {
-            itemTitle = "Item";
-        }
-        if (isBlank(unitMeasure)) {
-            unitMeasure = "unidad";
-        }
-        if (isBlank(mode)) {
-            mode = "dynamic";
-        }
-        if (isBlank(idempotencyKey)) {
-            idempotencyKey = externalReference;
-        }
-
-        logger.info("external_reference=" + externalReference);
-        logger.info("external_pos_id=" + externalPosId);
-        logger.info("total_amount=" + totalAmount);
-        logger.info("idempotency_key=" + idempotencyKey);
-        logger.info("path_properties=" + pathProperties);
-
-        // Setear properties como en tu otro puente
-        if (!isBlank(pathProperties)) {
-            System.setProperty("mp.config", pathProperties);
-        }
-
-        MpConfig cfg = MpConfig.load();
-        MpHttpClient http = new MpHttpClient(cfg);
-
-        String endpoint = cfg.get("mp.endpoint.createOrder", "/v1/orders");
-
-        // Armar body EXACTO (el que te funcionó)
-        JsonObject body = new JsonObject();
-        body.addProperty("type", "qr");
-        body.addProperty("total_amount", totalAmount);
-        body.addProperty("description", description);
-        body.addProperty("external_reference", externalReference);
-        body.addProperty("expiration_time", expirationTime);
-
-        JsonObject cfgNode = new JsonObject();
-        JsonObject qr = new JsonObject();
-        qr.addProperty("external_pos_id", externalPosId);
-        qr.addProperty("mode", mode);
-        cfgNode.add("qr", qr);
-        body.add("config", cfgNode);
-
-        JsonObject transactions = new JsonObject();
-        JsonArray payments = new JsonArray();
-        JsonObject p0 = new JsonObject();
-        p0.addProperty("amount", totalAmount);
-        payments.add(p0);
-        transactions.add("payments", payments);
-        body.add("transactions", transactions);
-
-        JsonArray items = new JsonArray();
-        JsonObject it = new JsonObject();
-        it.addProperty("title", itemTitle);
-        it.addProperty("unit_price", totalAmount);
-        it.addProperty("quantity", 1);
-        it.addProperty("unit_measure", unitMeasure);
-        it.addProperty("external_code", externalCode);
-        items.add(it);
-        body.add("items", items);
-
-        String jsonBody = GSON.toJson(body);
-
-        logger.info("POST " + endpoint);
-        logger.info("BODY " + jsonBody);
-
-        try {
-            MpHttpClient.MpHttpResponse r = http.postJson(endpoint, jsonBody, idempotencyKey);
-            logger.info("HTTP " + r.statusCode);
-            logger.info("RESP " + r.body);
-
-            if (!(r.is2xx() || r.statusCode == 201)) {
-                return fail(argv, 4, "HTTP " + r.statusCode + " - " + r.body);
-            }
-
-            // Parse response
-            JsonObject mp = GSON.fromJson(r.body, JsonObject.class);
-
-            String orderId = getJsonStr(mp, "id");
-            String status = getJsonStr(mp, "status");
-            String paymentId = null;
-            String qrData = null;
-
-            try {
-                if (mp.has("transactions") && mp.get("transactions").isJsonObject()) {
-                    JsonObject tr = mp.getAsJsonObject("transactions");
-                    if (tr.has("payments") && tr.get("payments").isJsonArray() && tr.getAsJsonArray("payments").size() > 0) {
-                        JsonObject pay0 = tr.getAsJsonArray("payments").get(0).getAsJsonObject();
-                        paymentId = getJsonStr(pay0, "id");
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-
-            try {
-                if (mp.has("type_response") && mp.get("type_response").isJsonObject()) {
-                    JsonObject tr = mp.getAsJsonObject("type_response");
-                    qrData = getJsonStr(tr, "qr_data");
-                }
-            } catch (Exception ignored) {
-            }
-
-            // Salidas (como tu MRP-001)
-            setOut(argv, O_RES, "0");
-            setOut(argv, O_MSG, "OK");
-            setOut(argv, O_ID, nvl(orderId));
-            setOut(argv, O_QR, nvl(qrData));
-            setOut(argv, O_STATUS, nvl(status));
-            setOut(argv, O_PAYID, nvl(paymentId));
-            setOut(argv, O_RAW, r.body); // mp_raw_json
-
-            return 0;
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error createOrder: " + e.getMessage(), e);
-            return fail(argv, 5, "Excepción: " + e.getMessage());
-        }
+        MpResult r = core(argv).createOrder(in);
+        MpOutWriter.write(argv, r);
+        return 0;
     }
 
     private int getOrder(CobolVar[] argv) {
 
-        // Entradas mínimas para Q
-        String orderId = getStr(argv, 1);   // reutilizamos argv[1]
-        String pathProperties = getStr(argv, 10);  // reutilizamos argv[10]
-
-        if (isBlank(orderId)) {
-            return fail(argv, 1, "Falta order_id (argv[1])");
+        String orderId = getStr(argv, I_ORDER_ID);
+        MpResult r = core(argv).getOrder(orderId);
+        if (r != null && (r.id == null || r.id.trim().isEmpty())) {
+            r.id = orderId;
         }
-
-        logger.info("order_id=" + orderId);
-        logger.info("path_properties=" + pathProperties);
-
-        // Setear properties como en tu otro puente
-        if (!isBlank(pathProperties)) {
-            System.setProperty("mp.config", pathProperties);
-        }
-
-        MpConfig cfg = MpConfig.load();
-        MpHttpClient http = new MpHttpClient(cfg);
-
-        String endpointFmt = cfg.get("mp.endpoint.getOrder", "/v1/orders/%s");
-        String endpoint = String.format(endpointFmt, orderId);
-
-        logger.info("GET " + endpoint);
-
-        try {
-            MpHttpClient.MpHttpResponse r = http.get(endpoint, null);
-
-            logger.info("HTTP " + r.statusCode);
-            logger.info("RESP " + r.body);
-
-            if (!r.is2xx()) {
-                return fail(argv, 4, "HTTP " + r.statusCode + " - " + r.body);
-            }
-
-            JsonObject mp = GSON.fromJson(r.body, JsonObject.class);
-
-            String status = getJsonStr(mp, "status");
-            String paymentId = null;
-            String qrData = null;
-
-            // payment_id: transactions.payments[0].id
-            try {
-                if (mp.has("transactions") && mp.get("transactions").isJsonObject()) {
-                    JsonObject tr = mp.getAsJsonObject("transactions");
-                    if (tr.has("payments") && tr.get("payments").isJsonArray() && tr.getAsJsonArray("payments").size() > 0) {
-                        JsonObject pay0 = tr.getAsJsonArray("payments").get(0).getAsJsonObject();
-                        paymentId = getJsonStr(pay0, "id");
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-
-            // qr_data: type_response.qr_data (a veces viene siempre, a veces no)
-            try {
-                if (mp.has("type_response") && mp.get("type_response").isJsonObject()) {
-                    JsonObject tr = mp.getAsJsonObject("type_response");
-                    qrData = getJsonStr(tr, "qr_data");
-                }
-            } catch (Exception ignored) {
-            }
-
-            // Salidas (mismo contrato)
-            setOut(argv, O_RES, "0");
-            setOut(argv, O_MSG, "OK");
-            setOut(argv, O_ID, orderId);       // order_id
-            setOut(argv, O_QR, nvl(qrData));   // qr_data
-            setOut(argv, O_STATUS, nvl(status));   // status
-            setOut(argv, O_PAYID, nvl(paymentId));// payment_id
-            setOut(argv, O_RAW, r.body);        // mp_raw_json
-
-            return 0;
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error getOrder: " + e.getMessage(), e);
-            return fail(argv, 5, "Excepción: " + e.getMessage());
-        }
+        MpOutWriter.write(argv, r);
+        return 0;
     }
 
     private int cancelOrder(CobolVar[] argv) {
@@ -480,7 +272,7 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         in.offset = parseIntDef(getStr(argv, I_OFFSET), 0);
         in.filterExternalId = getStr(argv, I_FILTER_EXTID);
 
-        MpResult r = core(argv).searchStores(com.hs.config.MpConfig.load().userId(), in);
+        MpResult r = core(argv).searchStores(in);
         MpOutWriter.write(argv, r);
         return 0;
     }
