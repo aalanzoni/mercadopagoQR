@@ -6,17 +6,14 @@ import com.hs.dto.MpResult;
 import com.hs.dto.PosIn;
 import com.hs.dto.SearchIn;
 import com.hs.dto.StoreIn;
-import com.hs.http.MpHttp;
-import com.hs.http.MpHttpAdapter;
 import com.hs.http.MpHttpClient;
-
 import java.util.UUID;
+import java.util.logging.Logger;
 
 /**
  * Test manual por consola de métodos de MpBridgeCore (Admin: S/LS/P/LP).
  *
- * Uso:
- *   java ... com.hs.MainMpAdminTest C:\ruta\mercadopagoQR.properties
+ * Uso: java ... com.hs.MainMpAdminTest C:\ruta\mercadopagoQR.properties
  */
 public class MainMpAdminTest {
 
@@ -29,8 +26,7 @@ public class MainMpAdminTest {
 
             MpConfig cfg = MpConfig.load();
             MpHttpClient httpClient = new MpHttpClient(cfg);
-            MpHttp http = new MpHttpAdapter(httpClient);
-            MpBridgeCore core = new MpBridgeCore(cfg, http);
+            MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
 
             // ====== Datos de prueba (cambiá a gusto) ======
             String storeExternalId = "SUCURSAL999";
@@ -115,7 +111,9 @@ public class MainMpAdminTest {
 
     private static long parseLongSafe(String s) {
         try {
-            if (s == null) return 0;
+            if (s == null) {
+                return 0;
+            }
             return Long.parseLong(s.trim());
         } catch (Exception e) {
             return 0;

@@ -1,118 +1,178 @@
 package com.hs.http;
 
 import com.hs.config.MpConfig;
+import java.nio.charset.StandardCharsets;
+import java.util.logging.Logger;
 import org.apache.http.Header;
-import org.apache.http.client.config.RequestConfig;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.*;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
-
 public class MpHttpClient {
 
     private final MpConfig cfg;
+    private final Logger logger;
     private final CloseableHttpClient client;
 
+    private final boolean logHttp;
+    private final int logHttpMax;
+
     public MpHttpClient(MpConfig cfg) {
+        this(cfg, null);
+    }
+
+    public MpHttpClient(MpConfig cfg, Logger logger) {
         this.cfg = cfg;
-
-        RequestConfig rc = RequestConfig.custom()
-                .setConnectTimeout(cfg.connectTimeoutMs())
-                .setConnectionRequestTimeout(cfg.connectTimeoutMs())
-                .setSocketTimeout(cfg.socketTimeoutMs())
-                .build();
-
-        this.client = HttpClients.custom()
-                .setDefaultRequestConfig(rc)
-                .build();
+        this.logger = logger;
+        this.logHttp = cfg.logHttp();
+        this.logHttpMax = cfg.logHttpMax();
+        this.client = HttpClients.createDefault();
     }
 
-    public MpHttpResponse get(String path, String idempotencyKey) throws Exception {
-        HttpGet req = new HttpGet(fullUrl(path));
-        applyCommonHeaders(req, idempotencyKey);
-        return execute(req);
+    /* =========================================================
+       PUBLIC API
+       ========================================================= */
+    public MpHttpResponse get(String endpoint) throws Exception {
+        HttpGet req = new HttpGet(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        return execute(req, null);
     }
 
-    public MpHttpResponse postJson(String path, String jsonBody, String idempotencyKey) throws Exception {
-        HttpPost req = new HttpPost(fullUrl(path));
-        applyCommonHeaders(req, idempotencyKey);
-        req.setEntity(new StringEntity(jsonBody == null ? "" : jsonBody, StandardCharsets.UTF_8));
-        return execute(req);
+    public MpHttpResponse get(String endpoint, String idempotencyKey) throws Exception {
+        HttpGet req = new HttpGet(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        applyIdempotency(req, idempotencyKey);
+        return execute(req, null);
     }
 
-    public MpHttpResponse putJson(String path, String jsonBody, String idempotencyKey) throws Exception {
-        HttpPut req = new HttpPut(fullUrl(path));
-        applyCommonHeaders(req, idempotencyKey);
-        req.setEntity(new StringEntity(jsonBody == null ? "" : jsonBody, StandardCharsets.UTF_8));
-        return execute(req);
+    public MpHttpResponse postJson(String endpoint, String jsonBody) throws Exception {
+        HttpPost req = new HttpPost(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        if (jsonBody != null) {
+            req.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
+        }
+        return execute(req, jsonBody);
     }
 
-    public MpHttpResponse delete(String path, String idempotencyKey) throws Exception {
-        HttpDelete req = new HttpDelete(fullUrl(path));
-        applyCommonHeaders(req, idempotencyKey);
-        return execute(req);
+    public MpHttpResponse postJson(String endpoint, String jsonBody, String idempotencyKey) throws Exception {
+        HttpPost req = new HttpPost(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        applyIdempotency(req, idempotencyKey);
+        if (jsonBody != null) {
+            req.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
+        }
+        return execute(req, jsonBody);
     }
 
-    private MpHttpResponse execute(HttpRequestBase req) throws Exception {
-        CloseableHttpResponse resp = null;
-        try {
-            resp = client.execute(req);
+    public MpHttpResponse putJson(String endpoint, String jsonBody) throws Exception {
+        HttpPut req = new HttpPut(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        if (jsonBody != null) {
+            req.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
+        }
+        return execute(req, jsonBody);
+    }
+
+    public MpHttpResponse putJson(String endpoint, String jsonBody, String idempotencyKey) throws Exception {
+        HttpPut req = new HttpPut(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        applyIdempotency(req, idempotencyKey);
+        if (jsonBody != null) {
+            req.setEntity(new StringEntity(jsonBody, StandardCharsets.UTF_8));
+        }
+        return execute(req, jsonBody);
+    }
+
+    public MpHttpResponse delete(String endpoint) throws Exception {
+        HttpDelete req = new HttpDelete(cfg.baseUrl() + endpoint);
+        applyHeaders(req);
+        return execute(req, null);
+    }
+
+    private void applyIdempotency(HttpRequestBase req, String idempotencyKey) {
+        if (idempotencyKey != null) {
+            String k = idempotencyKey.trim();
+            if (!k.isEmpty()) {
+                req.setHeader("X-Idempotency-Key", k); // (si antes usabas "Idempotency-Key", cambiamos abajo)
+            }
+        }
+    }
+
+    /* =========================================================
+       CORE EXECUTION
+       ========================================================= */
+    private MpHttpResponse execute(HttpRequestBase req, String requestBody) throws Exception {
+
+        if (logHttp && logger != null) {
+            logger.info("MP HTTP REQUEST " + req.getMethod() + " " + req.getURI());
+            if (requestBody != null && !requestBody.isEmpty()) {
+                logger.info("MP HTTP REQUEST JSON: " + preview(requestBody));
+            }
+        }
+
+        try ( CloseableHttpResponse resp = client.execute(req)) {
 
             int status = resp.getStatusLine().getStatusCode();
-            String body = resp.getEntity() != null
-                    ? EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8)
-                    : "";
-
+            String body = extractBody(resp);
             Header[] headers = resp.getAllHeaders();
-            return new MpHttpResponse(status, body, headers);
 
-        } finally {
-            if (resp != null) try { resp.close(); } catch (Exception ignored) {}
+            if (logHttp && logger != null) {
+                logger.info("MP HTTP RESPONSE status=" + status);
+                if (body != null && !body.isEmpty()) {
+                    logger.info("MP HTTP RESPONSE JSON: " + preview(body));
+                }
+            }
+
+            // ✅ ahora con headers
+            return new MpHttpResponse(status, body, headers);
         }
     }
 
-    private void applyCommonHeaders(HttpRequestBase req, String idempotencyKey) {
-        // Auth
+    /* =========================================================
+       HELPERS
+       ========================================================= */
+    private void applyHeaders(HttpRequestBase req) {
         req.setHeader("Authorization", "Bearer " + cfg.accessToken());
-
-        // Content
         req.setHeader("Content-Type", "application/json");
         req.setHeader("Accept", "application/json");
+    }
 
-        // Idempotency (clave para CREATE_ORDER, etc.)
-        String key = (idempotencyKey == null || idempotencyKey.trim().isEmpty())
-                ? null
-                : idempotencyKey.trim();
-
-        if (key != null) {
-            // Mercado Pago usa X-Idempotency-Key
-            req.setHeader("X-Idempotency-Key", key);
+    private String extractBody(HttpResponse resp) throws Exception {
+        HttpEntity entity = resp.getEntity();
+        if (entity == null) {
+            return "";
         }
-
-        // Trace opcional
-        req.setHeader("X-Request-Id", UUID.randomUUID().toString());
+        return EntityUtils.toString(entity, StandardCharsets.UTF_8);
     }
 
-    private String fullUrl(String path) {
-        String base = cfg.baseUrl();
-        if (path == null) path = "";
-        if (!path.startsWith("/")) path = "/" + path;
-
-        // Evita doble slash
-        if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        return base + path;
+    private String preview(String s) {
+        if (s == null) {
+            return "";
+        }
+        return (s.length() <= logHttpMax)
+                ? s
+                : s.substring(0, logHttpMax) + "...";
     }
 
-    /** Llamar al final del proceso si lo usás como “app standalone”. */
+    /* =========================================================
+       RESPONSE DTO
+       ========================================================= */
+    /**
+     * Llamar al final del proceso si lo usás como “app standalone”.
+     */
     public void closeQuietly() {
-        try { client.close(); } catch (Exception ignored) {}
+        try {
+            client.close();
+        } catch (Exception ignored) {
+        }
     }
 
     public static class MpHttpResponse {
+
         public final int statusCode;
         public final String body;
         public final Header[] headers;

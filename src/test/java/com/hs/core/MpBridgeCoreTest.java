@@ -3,9 +3,9 @@ package com.hs.core;
 import com.hs.config.MpConfig;
 import com.hs.dto.*;
 import com.hs.http.MpHttp;
-import org.junit.jupiter.api.Test;
-
+import java.util.logging.Logger;
 import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -25,7 +25,9 @@ public class MpBridgeCoreTest {
         when(http.postJson(eq("/v1/orders"), anyString(), anyString()))
                 .thenReturn(new MpHttp.MpHttpResponse(201, mpResp));
 
-        MpBridgeCore core = new MpBridgeCore(cfg, http);
+        Logger testLogger = Logger.getLogger("MpBridgeCoreTest");
+
+        MpBridgeCore core = new MpBridgeCore(cfg, testLogger);
 
         OrderIn in = new OrderIn();
         in.externalReference = "REF-1";
@@ -61,7 +63,8 @@ public class MpBridgeCoreTest {
         when(http.get(eq("/v1/orders/123")))
                 .thenReturn(new MpHttp.MpHttpResponse(200, "{\"status\":\"processing\"}"));
 
-        MpBridgeCore core = new MpBridgeCore(cfg, http);
+        Logger testLogger = Logger.getLogger("MpBridgeCoreTest");
+        MpBridgeCore core = new MpBridgeCore(cfg, testLogger);
         MpResult r = core.cancelOrder("123", "IDEM");
 
         assertEquals(2, r.res);
@@ -78,7 +81,8 @@ public class MpBridgeCoreTest {
         when(http.get(contains("/pos?")))
                 .thenReturn(new MpHttp.MpHttpResponse(200, "{\"results\":[]}"));
 
-        MpBridgeCore core = new MpBridgeCore(cfg, http);
+        Logger testLogger = Logger.getLogger("MpBridgeCoreTest");
+        MpBridgeCore core = new MpBridgeCore(cfg, testLogger);
         SearchIn in = new SearchIn();
         in.limit = 50;
         in.offset = 0;

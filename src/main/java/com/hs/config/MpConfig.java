@@ -7,6 +7,9 @@ public class MpConfig {
 
     private final Properties p;
 
+    Boolean logHttp = false;
+    int logHttpMax = 0;
+
     private MpConfig(Properties p) {
         this.p = p;
     }
@@ -128,4 +131,28 @@ public class MpConfig {
             return def;
         }
     }
+
+    public boolean getBoolean(String key, boolean def) {
+        String v = p.getProperty(key);
+        if (v == null) {
+            return def;
+        }
+        v = v.trim().toLowerCase();
+        return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("on");
+    }
+
+    public boolean logHttp() {
+        if (logHttp == null) {
+            logHttp = getBoolean("mp.log.http", false);
+        }
+        return logHttp;
+    }
+
+    public int logHttpMax() {
+        if (logHttpMax <= 0) {
+            logHttpMax = getInt("mp.log.http.max", 2000);
+        }
+        return logHttpMax;
+    }
+
 }

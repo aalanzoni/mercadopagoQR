@@ -7,8 +7,10 @@ import com.google.gson.JsonObject;
 import com.hs.config.MpConfig;
 import com.hs.dto.*;
 import com.hs.http.MpHttp;
+import com.hs.http.MpHttpAdapter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.util.logging.Logger;
 
 /**
  * Capa de negocio/armado de JSON para Mercado Pago.
@@ -21,9 +23,9 @@ public class MpBridgeCore {
     private final MpHttp http;
     private final Gson gson = new Gson();
 
-    public MpBridgeCore(MpConfig cfg, MpHttp http) {
+    public MpBridgeCore(MpConfig cfg, Logger logger) {
         this.cfg = cfg;
-        this.http = http;
+        this.http = new MpHttpAdapter(cfg, logger);
     }
 
     // --------------------------

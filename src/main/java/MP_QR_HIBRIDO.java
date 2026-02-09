@@ -4,13 +4,9 @@ import com.hs.bridge.MpOutWriter;
 import com.hs.config.MpConfig;
 import com.hs.core.MpBridgeCore;
 import com.hs.dto.MpResult;
-import com.hs.http.MpHttp;
-import com.hs.http.MpHttpAdapter;
-import com.hs.http.MpHttpClient;
 import com.iscobol.rts.IscobolCall;
 import com.iscobol.types.CobolVar;
 import com.iscobol.types.NumericVar;
-
 import java.io.File;
 import java.util.logging.FileHandler;
 import java.util.logging.Handler;
@@ -177,10 +173,8 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         }
 
         MpConfig cfg = MpConfig.load();
-        MpHttpClient httpClient = new MpHttpClient(cfg);
-        MpHttp http = new MpHttpAdapter(httpClient);
 
-        return new MpBridgeCore(cfg, http);
+        return new MpBridgeCore(cfg, logger);
     }
 
     // ======= ACCIONES (todas delegadas al core) =======

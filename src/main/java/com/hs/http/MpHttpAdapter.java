@@ -1,11 +1,14 @@
 package com.hs.http;
+import com.hs.config.MpConfig;
+import java.util.logging.Logger;
 
 public class MpHttpAdapter implements MpHttp {
 
     private final MpHttpClient http;
+    
 
-    public MpHttpAdapter(MpHttpClient http) {
-        this.http = http;
+    public MpHttpAdapter(MpConfig cfg, Logger logger) {
+        this.http = new MpHttpClient(cfg, logger);
     }
 
     @Override
