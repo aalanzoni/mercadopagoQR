@@ -394,7 +394,7 @@ public class MP_QR_HIBRIDO implements IscobolCall {
     private void logOutputsCompact(CobolVar[] argv) {
         try {
             String raw = getStr(argv, O_RAW);
-            String rawPreview = sanitize(raw, 300);
+            String rawOneLine = sanitize(raw, 0);
 
             logger.info("==== MP_QR_HIBRIDO OUTPUTS ====");
             logger.info("res=" + sanitize(getStr(argv, O_RES), 10)
@@ -406,16 +406,17 @@ public class MP_QR_HIBRIDO implements IscobolCall {
 
             logger.info("qr_data_preview=" + sanitize(getStr(argv, O_QR), 200));
 
-            logger.info("raw_json_len=" + (raw == null ? 0 : raw.length())
-                    + " raw_json_preview=" + rawPreview);
+            logger.info("raw_json_len=" + (rawOneLine == null ? 0 : rawOneLine.length()));
+            logLarge("raw_json", rawOneLine);
 
         } catch (Exception e) {
             safeLog(Level.WARNING, "No se pudo loguear outputs", e);
         }
     }
 
-    // ======= HELPERS =======
-    private String sanitize(String s, int max) {
+
+// ======= HELPERS =======
+private String sanitize(String s, int max) {
         if (s == null) {
             return "";
         }
@@ -426,7 +427,25 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         return x;
     }
 
-    private String getStr(CobolVar[] argv, int idx) {
+    
+    private void logLarge(String label, String text) {
+        if (text == null) {
+            logger.info(label + "=<null>");
+            return;
+        }
+        final int CHUNK = 500;
+        int len = text.length();
+        if (len == 0) {
+            logger.info(label + "=[]");
+            return;
+        }
+        for (int i = 0; i < len; i += CHUNK) {
+            int end = Math.min(len, i + CHUNK);
+            logger.info(label + "_part[" + i + "-" + end + "]=" + text.substring(i, end));
+        }
+    }
+
+private String getStr(CobolVar[] argv, int idx) {
         try {
             if (argv == null || idx < 0 || idx >= argv.length) {
                 return "";
