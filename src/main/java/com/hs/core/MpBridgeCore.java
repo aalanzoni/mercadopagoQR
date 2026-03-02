@@ -48,6 +48,9 @@ public class MpBridgeCore {
         String mode = isBlank(in.mode) ? "dynamic" : in.mode.trim();
         String unitMeasure = isBlank(in.unitMeasure) ? "unidad" : in.unitMeasure.trim();
         String itemTitle = isBlank(in.itemTitle) ? "Item" : in.itemTitle.trim();
+        if (itemTitle.isEmpty()){
+            itemTitle = in.description;
+        }
         String idem = isBlank(in.idempotencyKey) ? in.externalReference.trim() : in.idempotencyKey.trim();
 
         String endpoint = cfg.get("mp.endpoint.createOrder", "/v1/orders");
@@ -256,6 +259,47 @@ public class MpBridgeCore {
 
         } catch (Exception ex) {
             return MpResult.error(4, "Error técnico refundOrder: " + ex.getMessage());
+        }
+    }
+
+    
+    // --------------------------
+    // Pagos (QP)
+    // --------------------------
+    /**
+     * Consulta un pago por payment_id.
+     * Endpoint estándar: /v1/payments/{paymentId}
+     */
+    public MpResult getPayment(String paymentId) {
+        if (isBlank(paymentId)) {
+            return MpResult.error(4, "Falta payment_id");
+        }
+
+        String endpointFmt = cfg.get("mp.endpoint.getPayment", "/v1/payments/%s");
+        String endpoint = String.format(endpointFmt, paymentId.trim());
+
+        try {
+            MpHttp.MpHttpResponse r = http.get(endpoint);
+
+            MpResult out = MpResult.ok();
+            out.paymentId = paymentId.trim();
+            out.id = paymentId.trim();      // por consistencia, devolvemos el id consultado
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP getPayment HTTP " + r.httpCode;
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+            // MercadoPago Payments suele devolver status y status_detail
+            out.status = getJsonStr(mp, "status");
+            out.msg = "OK";
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico getPayment: " + ex.getMessage());
         }
     }
 

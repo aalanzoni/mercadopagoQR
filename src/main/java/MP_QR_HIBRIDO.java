@@ -21,7 +21,7 @@ import java.util.logging.SimpleFormatter;
  * argv[26..32]
  *
  * ACCION (argv[0]): "O" Crear Orden QR "Q" Consultar Orden "C" Cancelar Orden
- * "R" Refund "S" Crear Store "P" Crear POS "LS" Buscar Stores "LP" Buscar POS
+ * "R" Refund "QP" Consultar Pago "S" Crear Store "P" Crear POS "LS" Buscar Stores "LP" Buscar POS
  *
  * SALIDAS (siempre): argv[26] resultado (0 OK, !=0 ERROR) argv[27] msg argv[28]
  * id relevante (order_id / store_id / pos_id según acción) argv[29] qr_data (si
@@ -119,6 +119,11 @@ public class MP_QR_HIBRIDO implements IscobolCall {
                 case "R":
                     logger.info("---> REFUND_ORDER (R)");
                     resultado = refundOrder(argv);
+                    break;
+
+                case "QP":
+                    logger.info("---> GET_PAYMENT (QP)");
+                    resultado = getPayment(argv);
                     break;
 
                 case "S":
@@ -221,6 +226,23 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         String idem = getStr(argv, I_IDEMPOTENCY);
 
         MpResult r = core(argv).refundOrder(orderId, idem);
+        MpOutWriter.write(argv, r);
+        return 0;
+    }
+
+
+    private int getPayment(CobolVar[] argv) {
+        // Para QP reutilizamos argv[1] (I_EXT_REF) como payment_id
+        String paymentId = getStr(argv, I_EXT_REF);
+
+        MpResult r = core(argv).getPayment(paymentId);
+        if (r != null && isBlank(r.paymentId)) {
+            r.paymentId = paymentId;
+        }
+        if (r != null && isBlank(r.id)) {
+            // por consistencia devolvemos en O_ID el payment_id consultado
+            r.id = paymentId;
+        }
         MpOutWriter.write(argv, r);
         return 0;
     }
