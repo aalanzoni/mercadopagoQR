@@ -8,6 +8,9 @@ public class MpResult {
     public String status;
     public String paymentId;
     public String rawJson;
+    public String qrImage;
+    public String qrTemplateDocument;
+    public String qrTemplateImage;
 
     public static MpResult ok() {
         MpResult r = new MpResult();

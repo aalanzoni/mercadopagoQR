@@ -48,7 +48,7 @@ public class MpBridgeCore {
         String mode = isBlank(in.mode) ? "dynamic" : in.mode.trim();
         String unitMeasure = isBlank(in.unitMeasure) ? "unidad" : in.unitMeasure.trim();
         String itemTitle = isBlank(in.itemTitle) ? "Item" : in.itemTitle.trim();
-        if (itemTitle.isEmpty()){
+        if (itemTitle.isEmpty()) {
             itemTitle = in.description;
         }
         String idem = isBlank(in.idempotencyKey) ? in.externalReference.trim() : in.idempotencyKey.trim();
@@ -262,13 +262,12 @@ public class MpBridgeCore {
         }
     }
 
-    
     // --------------------------
     // Pagos (QP)
     // --------------------------
     /**
-     * Consulta un pago por payment_id.
-     * Endpoint estándar: /v1/payments/{paymentId}
+     * Consulta un pago por payment_id. Endpoint estándar:
+     * /v1/payments/{paymentId}
      */
     public MpResult getPayment(String paymentId) {
         if (isBlank(paymentId)) {
@@ -378,16 +377,15 @@ public class MpBridgeCore {
         }
     }
 
-    
-public MpResult searchStores(SearchIn in) {
+    public MpResult searchStores(SearchIn in) {
 
-    String userId = cfg.userId();
-    if (isBlank(userId)) {
-        return MpResult.error(4, "Falta user_id en config");
+        String userId = cfg.userId();
+        if (isBlank(userId)) {
+            return MpResult.error(4, "Falta user_id en config");
+        }
+
+        return searchStores(userId, in);
     }
-
-    return searchStores(userId, in);
-}
 
     public MpResult searchStores(String userId, SearchIn in) {
 
@@ -496,6 +494,12 @@ public MpResult searchStores(SearchIn in) {
 
             JsonObject mp = safeObj(r.body);
             out.id = firstNonBlank(getJsonStr(mp, "id"), getJsonStr(mp, "pos_id"));
+            JsonObject qr = obj(mp.get("qr"));
+            if (qr != null) {
+                out.qrImage = getJsonStr(qr, "image");
+                out.qrTemplateDocument = getJsonStr(qr, "template_document");
+                out.qrTemplateImage = getJsonStr(qr, "template_image");
+            }
             out.msg = "OK";
             return out;
 

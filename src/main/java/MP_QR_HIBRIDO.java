@@ -21,7 +21,8 @@ import java.util.logging.SimpleFormatter;
  * argv[26..32]
  *
  * ACCION (argv[0]): "O" Crear Orden QR "Q" Consultar Orden "C" Cancelar Orden
- * "R" Refund "QP" Consultar Pago "S" Crear Store "P" Crear POS "LS" Buscar Stores "LP" Buscar POS
+ * "R" Refund "QP" Consultar Pago "S" Crear Store "P" Crear POS "LS" Buscar
+ * Stores "LP" Buscar POS
  *
  * SALIDAS (siempre): argv[26] resultado (0 OK, !=0 ERROR) argv[27] msg argv[28]
  * id relevante (order_id / store_id / pos_id según acción) argv[29] qr_data (si
@@ -75,10 +76,16 @@ public class MP_QR_HIBRIDO implements IscobolCall {
     private static final int O_STATUS = 30;
     private static final int O_PAYID = 31;
     private static final int O_RAW = 32;
+    
+    private static final int O_QR_IMAGE = 33;
+    private static final int O_QR_TEMPLATE_DOC = 34;
+    private static final int O_QR_TEMPLATE_IMG = 35;
 
+    
     // Alias semánticos (mismo índice, no cambia contrato)
     private static final int I_ORDER_ID = I_EXT_REF;       // Q/C/R usan argv[1]
     private static final int I_IDEMPOTENCY = I_IDEM;
+
 
     @Override
     public Object call(Object[] argv) {
@@ -229,7 +236,6 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         MpOutWriter.write(argv, r);
         return 0;
     }
-
 
     private int getPayment(CobolVar[] argv) {
         // Para QP reutilizamos argv[1] (I_EXT_REF) como payment_id
@@ -436,9 +442,8 @@ public class MP_QR_HIBRIDO implements IscobolCall {
         }
     }
 
-
 // ======= HELPERS =======
-private String sanitize(String s, int max) {
+    private String sanitize(String s, int max) {
         if (s == null) {
             return "";
         }
@@ -449,7 +454,6 @@ private String sanitize(String s, int max) {
         return x;
     }
 
-    
     private void logLarge(String label, String text) {
         if (text == null) {
             logger.info(label + "=<null>");
@@ -467,7 +471,7 @@ private String sanitize(String s, int max) {
         }
     }
 
-private String getStr(CobolVar[] argv, int idx) {
+    private String getStr(CobolVar[] argv, int idx) {
         try {
             if (argv == null || idx < 0 || idx >= argv.length) {
                 return "";
