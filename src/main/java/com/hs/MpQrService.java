@@ -7,6 +7,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonElement;
 import java.util.logging.Logger;
 
+/**
+ * LEGACY / NO USAR -> reemplazada por MpBridgeCore + MP_QR_HIBRIDO
+ * @author Andres Lanzoni
+ */
 public class MpQrService {
 
     private static final Gson GSON = new Gson();

@@ -15,9 +15,10 @@ public class MpConfig {
     }
 
     /**
-     * Carga properties desde: 1) -Dmp.config=RUTA\mercadopago.properties 2)
-     * ./mercadopago.properties (directorio actual) 3) classpath
-     * (/mercadopago.properties)
+     * Carga properties desde: 1) -Dmp.config=RUTA\mercadopagoQR.properties
+     * 2) ./mercadopagoQR.properties
+     * 3) /mercadopagoQR.properties
+     * 4) target/classes/mercadopagoQR.properties     
      */
     public static MpConfig load() {
         Properties props = new Properties();

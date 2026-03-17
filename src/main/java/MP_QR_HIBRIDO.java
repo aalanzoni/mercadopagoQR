@@ -18,7 +18,7 @@ import java.util.logging.SimpleFormatter;
  * Puente ISCOBOL -> MercadoPago QR híbrido.
  *
  * CONTRATO argv (33 parámetros): - ENTRADAS: argv[0..25] - SALIDAS:
- * argv[26..32]
+ * argv[26..35]
  *
  * ACCION (argv[0]): "O" Crear Orden QR "Q" Consultar Orden "C" Cancelar Orden
  * "R" Refund "QP" Consultar Pago "S" Crear Store "P" Crear POS "LS" Buscar
@@ -27,7 +27,22 @@ import java.util.logging.SimpleFormatter;
  * SALIDAS (siempre): argv[26] resultado (0 OK, !=0 ERROR) argv[27] msg argv[28]
  * id relevante (order_id / store_id / pos_id según acción) argv[29] qr_data (si
  * aplica) argv[30] status (si aplica) argv[31] payment_id (si aplica) argv[32]
- * mp_raw_json
+ * mp_raw_json 
+ * SALIDAS QR POS: argv[33..35]:
+ * argv[33] qr_image
+ * argv[34] qr_template_document
+ * argv[35] qr_template_image
+ * 
+ * O → usa I_EXT_REF, I_DESC, I_EXT_POS, I_MODO, I_EXP, I_TOTAL, I_UNIT, I_ITEM, I_EXT_CODE, I_IDEM
+ * Q → usa I_EXT_REF como order_id
+ * C → usa I_EXT_REF como order_id + I_IDEM
+ * R → usa I_EXT_REF como order_id + I_IDEM
+ * QP → usa I_EXT_REF como payment_id
+ * S → usa I_STORE_*
+ * P → usa I_POS_*
+ * LS → usa I_LIMIT, I_OFFSET, I_FILTER_EXTID
+ * LP → usa I_LIMIT, I_OFFSET, I_FILTER_EXTID
+ 
  */
 public class MP_QR_HIBRIDO implements IscobolCall {
 

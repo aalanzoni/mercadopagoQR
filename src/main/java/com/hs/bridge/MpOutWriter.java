@@ -6,6 +6,18 @@ import com.iscobol.types.CobolVar;
 public final class MpOutWriter {
 
     // OUT (contrato definitivo)
+    /**
+     * 26 resultado
+     * 27 mensaje
+     * 28 id
+     * 29 qr_data
+     * 30 status
+     * 31 payment_id
+     * 32 raw_json
+     * 33 qr_image
+     * 34 qr_template_document
+     * 35 qr_template_image
+     */
     private static final int O_RES = 26;
     private static final int O_MSG = 27;
     private static final int O_ID = 28;
