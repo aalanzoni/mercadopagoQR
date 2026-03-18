@@ -1,6 +1,7 @@
 package com.hs.dto;
 
 public class MpResult {
+
     public int res;          // 00 OK, 02 negocio, >=4 error
     public String msg;
     public String id;        // order_id / store_id / pos_id
@@ -11,6 +12,11 @@ public class MpResult {
     public String qrImage;
     public String qrTemplateDocument;
     public String qrTemplateImage;
+
+    // Nuevos campos para Payment Links / Checkout Pro
+    public String preferenceId;
+    public String paymentLink;
+    public String sandboxPaymentLink;
 
     public static MpResult ok() {
         MpResult r = new MpResult();

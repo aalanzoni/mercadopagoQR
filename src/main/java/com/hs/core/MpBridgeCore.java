@@ -12,6 +12,11 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.logging.Logger;
 
+import com.hs.dto.MpResult;
+import com.hs.dto.PaymentLinkIn;
+import com.hs.dto.PaymentLinkItemIn;
+import java.util.List;
+
 /**
  * Capa de negocio/armado de JSON para Mercado Pago.
  *
@@ -546,9 +551,257 @@ public class MpBridgeCore {
         }
     }
 
+    public MpResult createPaymentLink(PaymentLinkIn in) {
+        try {
+            MpResult v = validatePaymentLinkIn(in);
+            if (v != null) {
+                return v;
+            }
+
+            String endpoint = cfg.get("mp.endpoint.createPreference", "/checkout/preferences");
+            String idemKey = isBlank(in.idempotencyKey)
+                    ? in.externalReference.trim()
+                    : in.idempotencyKey.trim();
+
+            JsonObject body = buildPreferenceBody(in);
+
+            String jsonBody = gson.toJson(body);
+            System.out.println("JSON ENVIADO A MP = " + jsonBody);
+
+            MpHttp.MpHttpResponse r = http.postJson(endpoint, jsonBody, idemKey);
+
+            MpResult out = MpResult.ok();
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP createPreference HTTP " + r.httpCode;
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+
+            out.preferenceId = getJsonStr(mp, "id");
+            out.id = out.preferenceId;
+            out.paymentLink = getJsonStr(mp, "init_point");
+            out.sandboxPaymentLink = getJsonStr(mp, "sandbox_init_point");
+            out.msg = "OK";
+
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico createPaymentLink: " + ex.getMessage());
+        }
+    }
+
     // --------------------------
     // Parsing helpers
     // --------------------------
+    private JsonObject buildPreferenceBody(PaymentLinkIn in) {
+        System.out.println(">>> buildPreferenceBody NUEVO");
+
+        JsonObject body = new JsonObject();
+
+        JsonArray items = new JsonArray();
+        List<PaymentLinkItemIn> srcItems = in.items;
+
+        for (PaymentLinkItemIn src : srcItems) {
+            JsonObject item = new JsonObject();
+
+            if (!isBlank(src.code)) {
+                item.addProperty("id", safeText(src.code));
+            }
+
+            item.addProperty("title", safeText(src.title));
+            item.addProperty("description", safeText(src.description));
+            item.addProperty("quantity", parseIntSafe(src.quantity, 1));
+            item.addProperty("currency_id", "ARS");
+            item.addProperty("unit_price", parseDoubleSafe(src.unitPrice));
+
+            items.add(item);
+        }
+
+        body.add("items", items);
+        body.addProperty("external_reference", safeText(in.externalReference));
+
+        String additionalInfo = !isBlank(in.additionalInfo)
+                ? safeText(in.additionalInfo)
+                : buildInstallmentsSummary(in.items);
+
+        if (!isBlank(additionalInfo)) {
+            body.addProperty("additional_info", additionalInfo);
+        }
+
+        if (!isBlank(in.notificationUrl)) {
+            body.addProperty("notification_url", safeText(in.notificationUrl));
+        }
+
+        boolean hasBackSuccess = !isBlank(in.backUrlSuccess);
+        boolean hasBackPending = !isBlank(in.backUrlPending);
+        boolean hasBackFailure = !isBlank(in.backUrlFailure);
+
+        if (hasBackSuccess || hasBackPending || hasBackFailure) {
+            JsonObject backUrls = new JsonObject();
+
+            if (hasBackSuccess) {
+                backUrls.addProperty("success", safeText(in.backUrlSuccess));
+            }
+            if (hasBackPending) {
+                backUrls.addProperty("pending", safeText(in.backUrlPending));
+            }
+            if (hasBackFailure) {
+                backUrls.addProperty("failure", safeText(in.backUrlFailure));
+            }
+
+            body.add("back_urls", backUrls);
+
+            // Solo tiene sentido si existe al menos una URL de retorno real
+            body.addProperty("auto_return", "approved");
+
+            System.out.println(">>> hasBackSuccess=" + hasBackSuccess
+                    + " hasBackPending=" + hasBackPending
+                    + " hasBackFailure=" + hasBackFailure);
+        }
+
+        if (!isBlank(in.payerEmail) || !isBlank(in.payerName)) {
+            JsonObject payer = new JsonObject();
+
+            if (!isBlank(in.payerEmail)) {
+                payer.addProperty("email", safeText(in.payerEmail));
+            }
+            if (!isBlank(in.payerName)) {
+                payer.addProperty("name", safeText(in.payerName));
+            }
+
+            body.add("payer", payer);
+        }
+
+        boolean hasExpirationFrom = !isBlank(in.expirationDateFrom);
+        boolean hasExpirationTo = !isBlank(in.expirationDateTo);
+
+        if (hasExpirationFrom || hasExpirationTo) {
+            body.addProperty("expires", true);
+
+            if (hasExpirationFrom) {
+                body.addProperty("expiration_date_from", safeText(in.expirationDateFrom));
+            }
+            if (hasExpirationTo) {
+                body.addProperty("expiration_date_to", safeText(in.expirationDateTo));
+            }
+        }
+
+        return body;
+    }
+
+    private String buildInstallmentsSummary(List<PaymentLinkItemIn> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Cuotas incluidas: ");
+
+        int written = 0;
+        int max = Math.min(items.size(), 6);
+
+        for (int i = 0; i < items.size() && written < max; i++) {
+            PaymentLinkItemIn it = items.get(i);
+            if (it == null) {
+                continue;
+            }
+
+            String label = !isBlank(it.title) ? safeText(it.title) : "";
+            if (label.isEmpty()) {
+                continue;
+            }
+
+            if (written > 0) {
+                sb.append(", ");
+            }
+
+            sb.append(label);
+            written++;
+        }
+
+        if (items.size() > written) {
+            sb.append(" y ").append(items.size() - written).append(" más");
+        }
+
+        return sb.toString();
+    }
+
+    private String safeText(String s) {
+        if (s == null) {
+            return "";
+        }
+
+        String x = s.trim();
+
+        // Limpieza básica
+        x = x.replace('\r', ' ');
+        x = x.replace('\n', ' ');
+        x = x.replace('\t', ' ');
+
+        while (x.contains("  ")) {
+            x = x.replace("  ", " ");
+        }
+
+        return x;
+    }
+
+    private MpResult validatePaymentLinkIn(PaymentLinkIn in) {
+        if (in == null) {
+            return MpResult.error(4, "Falta input");
+        }
+
+        if (isBlank(in.externalReference)) {
+            return MpResult.error(4, "Falta external_reference");
+        }
+
+        if (in.items == null || in.items.isEmpty()) {
+            return MpResult.error(4, "Faltan items");
+        }
+
+        for (int i = 0; i < in.items.size(); i++) {
+            PaymentLinkItemIn it = in.items.get(i);
+
+            if (it == null) {
+                return MpResult.error(4, "Item nulo en posición " + i);
+            }
+
+            if (isBlank(it.title)) {
+                return MpResult.error(4, "Falta title en item " + i);
+            }
+
+            double price = parseDoubleSafe(it.unitPrice);
+            if (price <= 0d) {
+                return MpResult.error(4, "unit_price inválido en item " + i);
+            }
+
+            int qty = parseIntSafe(it.quantity, 1);
+            if (qty <= 0) {
+                return MpResult.error(4, "quantity inválida en item " + i);
+            }
+        }
+
+        return null;
+    }
+
+    private int parseIntSafe(String s, int def) {
+        if (s == null) {
+            return def;
+        }
+        String x = s.trim();
+        if (x.isEmpty()) {
+            return def;
+        }
+        try {
+            return Integer.parseInt(x);
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
     private static class PaymentInfo {
 
         String id;

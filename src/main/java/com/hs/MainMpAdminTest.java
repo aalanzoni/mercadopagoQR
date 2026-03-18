@@ -10,6 +10,11 @@ import com.hs.http.MpHttpClient;
 import java.util.UUID;
 import java.util.logging.Logger;
 
+import com.hs.dto.PaymentLinkIn;
+import com.hs.dto.PaymentLinkItemIn;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Test manual por consola de métodos de MpBridgeCore (Admin: S/LS/P/LP).
  *
@@ -17,82 +22,127 @@ import java.util.logging.Logger;
  */
 public class MainMpAdminTest {
 
+//    public static void main(String[] args) {
+//        try {
+//            // 1) Properties: por args[0] o por -Dmp.config
+//            if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
+//                System.setProperty("mp.config", args[0].trim());
+//            }
+//
+//            MpConfig cfg = MpConfig.load();
+//            MpHttpClient httpClient = new MpHttpClient(cfg);
+//            MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
+//
+//            // ====== Datos de prueba (cambiá a gusto) ======
+//            String storeExternalId = "SUCURSAL999";
+//            String storeName = "Sucursal 999";
+//            String posExternalId = "SUCURSAL999PDV001";
+//            String posName = "Caja 999";
+//
+//            // ====== 1) CREATE_STORE ======
+//            StoreIn s = new StoreIn();
+//            s.name = storeName;
+//            s.externalId = storeExternalId;
+//            s.street = "Av Siempre Viva";
+//            s.streetNumber = "123";
+//            s.city = "Córdoba";
+//            s.state = "Córdoba";
+//            s.latitude = "-31.4167";
+//            s.longitude = "-64.1833";
+//            s.idempotencyKey = "STORE-" + UUID.randomUUID();
+//
+//            System.out.println("===== CREATE_STORE =====");
+//            MpResult rs = core.createStore(s);
+//            dump(rs);
+//
+//            if (rs.res != 0) {
+//                System.out.println("ERROR creando store. Corto la prueba.");
+//                return;
+//            }
+//
+//            long storeId = parseLongSafe(rs.id);
+//            if (storeId <= 0) {
+//                System.out.println("No pude extraer store_id del response. Corto la prueba.");
+//                return;
+//            }
+//
+//            // ====== 2) SEARCH_STORES ======
+//            System.out.println("\n===== SEARCH_STORES =====");
+//            SearchIn ss = new SearchIn();
+//            ss.limit = 50;
+//            ss.offset = 0;
+//            ss.filterExternalId = storeExternalId;
+//            MpResult rls = core.searchStores(cfg.userId(), ss);
+//            dump(rls);
+//
+//            // ====== 3) CREATE_POS ======
+//            System.out.println("\n===== CREATE_POS =====");
+//            PosIn p = new PosIn();
+//            p.name = posName;
+//            p.externalId = posExternalId;
+//            p.storeId = storeId;
+//            p.idempotencyKey = "POS-" + UUID.randomUUID();
+//            MpResult rp = core.createPos(p);
+//            dump(rp);
+//
+//            // ====== 4) SEARCH_POS ======
+//            System.out.println("\n===== SEARCH_POS =====");
+//            SearchIn sp = new SearchIn();
+//            sp.limit = 50;
+//            sp.offset = 0;
+//            sp.filterExternalId = posExternalId;
+//            MpResult rlp = core.searchPos(sp);
+//            dump(rlp);
+//
+//            httpClient.closeQuietly();
+//
+//        } catch (Exception e) {
+//            System.out.println("ERROR general: " + e.getMessage());
+//            e.printStackTrace();
+//        }
+//    }
     public static void main(String[] args) {
         try {
-            // 1) Properties: por args[0] o por -Dmp.config
-            if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
-                System.setProperty("mp.config", args[0].trim());
-            }
-
             MpConfig cfg = MpConfig.load();
-            MpHttpClient httpClient = new MpHttpClient(cfg);
+//            MpBridgeCore core = new MpBridgeCore(cfg);
             MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
+            PaymentLinkIn in = new PaymentLinkIn();
+            in.externalReference = "COB-TEST-20260318-0004";
+            in.payerName = "Socio de Prueba";
+            in.payerEmail = "aalanzoni@gmail.com";
+            in.notificationUrl = "";
+            in.backUrlSuccess = "";
+            in.backUrlPending = "";
+            in.backUrlFailure = "";
+            in.expirationDateFrom = "";
+            in.expirationDateTo = "";
+            in.idempotencyKey = "IDEMP-COB-TEST-20260318-0004";
 
-            // ====== Datos de prueba (cambiá a gusto) ======
-            String storeExternalId = "SUCURSAL999";
-            String storeName = "Sucursal 999";
-            String posExternalId = "SUCURSAL999PDV001";
-            String posName = "Caja 999";
+            List<PaymentLinkItemIn> items = new ArrayList<PaymentLinkItemIn>();
 
-            // ====== 1) CREATE_STORE ======
-            StoreIn s = new StoreIn();
-            s.name = storeName;
-            s.externalId = storeExternalId;
-            s.street = "Av Siempre Viva";
-            s.streetNumber = "123";
-            s.city = "Córdoba";
-            s.state = "Córdoba";
-            s.latitude = "-31.4167";
-            s.longitude = "-64.1833";
-            s.idempotencyKey = "STORE-" + UUID.randomUUID();
+            PaymentLinkItemIn i1 = new PaymentLinkItemIn();
+            i1.code = "CUOTA-2026-01";
+            i1.title = "Cuota enero 2026";
+            i1.description = "Servicio social - período 01/2026";
+            i1.quantity = "1";
+            i1.unitPrice = "10500.00";
+            items.add(i1);
 
-            System.out.println("===== CREATE_STORE =====");
-            MpResult rs = core.createStore(s);
-            dump(rs);
+            PaymentLinkItemIn i2 = new PaymentLinkItemIn();
+            i2.code = "CUOTA-2026-02";
+            i2.title = "Cuota febrero 2026";
+            i2.description = "Servicio social - período 02/2026";
+            i2.quantity = "1";
+            i2.unitPrice = "10250.00";
+            items.add(i2);
 
-            if (rs.res != 0) {
-                System.out.println("ERROR creando store. Corto la prueba.");
-                return;
-            }
+            in.items = items;
 
-            long storeId = parseLongSafe(rs.id);
-            if (storeId <= 0) {
-                System.out.println("No pude extraer store_id del response. Corto la prueba.");
-                return;
-            }
+            MpResult r = core.createPaymentLink(in);
 
-            // ====== 2) SEARCH_STORES ======
-            System.out.println("\n===== SEARCH_STORES =====");
-            SearchIn ss = new SearchIn();
-            ss.limit = 50;
-            ss.offset = 0;
-            ss.filterExternalId = storeExternalId;
-            MpResult rls = core.searchStores(cfg.userId(), ss);
-            dump(rls);
-
-            // ====== 3) CREATE_POS ======
-            System.out.println("\n===== CREATE_POS =====");
-            PosIn p = new PosIn();
-            p.name = posName;
-            p.externalId = posExternalId;
-            p.storeId = storeId;
-            p.idempotencyKey = "POS-" + UUID.randomUUID();
-            MpResult rp = core.createPos(p);
-            dump(rp);
-
-            // ====== 4) SEARCH_POS ======
-            System.out.println("\n===== SEARCH_POS =====");
-            SearchIn sp = new SearchIn();
-            sp.limit = 50;
-            sp.offset = 0;
-            sp.filterExternalId = posExternalId;
-            MpResult rlp = core.searchPos(sp);
-            dump(rlp);
-
-            httpClient.closeQuietly();
+            dump(r);
 
         } catch (Exception e) {
-            System.out.println("ERROR general: " + e.getMessage());
             e.printStackTrace();
         }
     }
