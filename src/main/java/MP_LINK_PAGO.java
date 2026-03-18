@@ -9,7 +9,6 @@ import com.iscobol.types.NumericVar;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.logging.FileHandler;
 import java.util.logging.Handler;
@@ -24,6 +23,7 @@ public class MP_LINK_PAGO implements IscobolCall {
 
     private static final int MAX_ITEMS = 12;
     private static final int ITEM_BLOCK = 5;
+    private static final int TOTAL_ARGS = 72;
 
     // Entradas fijas
     private static final int I_EXT_REF = 0;
@@ -43,25 +43,40 @@ public class MP_LINK_PAGO implements IscobolCall {
 
     @Override
     public Object call(Object[] argv) {
-        CobolVar[] vars = new CobolVar[argv.length];
+        CobolVar[] argv2 = new CobolVar[argv.length];
         for (int i = 0; i < argv.length; i++) {
-            vars[i] = (CobolVar) argv[i];
+            argv2[i] = (CobolVar) argv[i];
         }
-        return call(vars);
+        return call(argv2);
     }
 
     public CobolVar call(CobolVar[] argv) {
+        int resultado;
+
         initLoggerPerCall();
 
         try {
+            if (argv == null || argv.length < TOTAL_ARGS) {
+                safeLog(Level.SEVERE,
+                        "Cantidad de argumentos inválida: "
+                                + (argv == null ? 0 : argv.length),
+                        null);
+                return NumericVar.literal(9, false);
+            }
+
             logInputsCompact(argv);
-            createPaymentLink(argv);
+            resultado = createPaymentLink(argv);
+
         } catch (Exception e) {
-            safeLog(Level.SEVERE, "Excepción general en MP_LINK_PAGO", e);
+            safeLog(Level.SEVERE, "Excepción general", e);
             fail(argv, 9, "Excepción: " + safeMsg(e));
+            resultado = 9;
+
         } finally {
             try {
-                logOutputsCompact(argv);
+                if (argv != null && argv.length >= TOTAL_ARGS) {
+                    logOutputsCompact(argv);
+                }
             } catch (Exception ignored) {
             }
             closeLoggerPerCall();
@@ -125,6 +140,14 @@ public class MP_LINK_PAGO implements IscobolCall {
             }
             if (price <= 0d) {
                 return fail(argv, 4, "El unit_price del item " + n + " debe ser mayor a 0");
+            }
+
+            if (logger != null) {
+                logger.info("item " + n
+                        + " code=" + sanitize(itemCode, 40)
+                        + " title=" + sanitize(itemTitle, 60)
+                        + " qty=" + qty
+                        + " price=" + toMoneyString(price));
             }
 
             PaymentLinkItemIn item = new PaymentLinkItemIn();
@@ -249,15 +272,26 @@ public class MP_LINK_PAGO implements IscobolCall {
             logger.addHandler(fh);
         } catch (Exception e) {
             logger = Logger.getLogger("MP_LINK_PAGO_FALLBACK");
+            logger.setUseParentHandlers(true);
+            logger.setLevel(Level.INFO);
         }
     }
 
     private void closeLoggerPerCall() {
         try {
             if (fh != null) {
-                try { fh.flush(); } catch (Exception ignored) {}
-                try { logger.removeHandler(fh); } catch (Exception ignored) {}
-                try { fh.close(); } catch (Exception ignored) {}
+                try {
+                    fh.flush();
+                } catch (Exception ignored) {
+                }
+                try {
+                    logger.removeHandler(fh);
+                } catch (Exception ignored) {
+                }
+                try {
+                    fh.close();
+                } catch (Exception ignored) {
+                }
             }
         } finally {
             fh = null;
@@ -269,9 +303,18 @@ public class MP_LINK_PAGO implements IscobolCall {
             return;
         }
         for (Handler h : log.getHandlers()) {
-            try { h.flush(); } catch (Exception ignored) {}
-            try { h.close(); } catch (Exception ignored) {}
-            try { log.removeHandler(h); } catch (Exception ignored) {}
+            try {
+                h.flush();
+            } catch (Exception ignored) {
+            }
+            try {
+                h.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                log.removeHandler(h);
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -281,6 +324,7 @@ public class MP_LINK_PAGO implements IscobolCall {
             logger.info("external_reference=" + sanitize(getStr(argv, I_EXT_REF), 80)
                     + " payer_email=" + sanitize(getStr(argv, I_PAYER_EMAIL), 80)
                     + " payer_name=" + sanitize(getStr(argv, I_PAYER_NAME), 80)
+                    + " additional_info=" + sanitize(getStr(argv, I_ADDITIONAL_INFO), 120)
                     + " cant_items=" + sanitize(getStr(argv, I_CANT_ITEMS), 10)
                     + " path=" + sanitize(getStr(argv, I_PATH), 200));
         } catch (Exception e) {
@@ -313,18 +357,21 @@ public class MP_LINK_PAGO implements IscobolCall {
     private void safeLog(Level level, String msg, Throwable t) {
         try {
             if (logger != null) {
-                logger.log(level, msg, t);
+                if (t != null) {
+                    logger.log(level, msg, t);
+                } else {
+                    logger.log(level, msg);
+                }
             }
         } catch (Exception ignored) {
         }
     }
 
-    
     @Override
     public void perform(int i, int i1) {
         // no-op
     }
 
     public void finalize() {
-    }    
+    }
 }
