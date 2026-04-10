@@ -1,3 +1,4 @@
+
 import com.hs.config.MpConfig;
 import com.hs.core.MpBridgeCore;
 import com.hs.dto.MpResult;
@@ -6,7 +7,6 @@ import com.hs.dto.PaymentLinkItemIn;
 import com.iscobol.rts.IscobolCall;
 import com.iscobol.types.CobolVar;
 import com.iscobol.types.NumericVar;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Locale;
@@ -59,13 +59,19 @@ public class MP_LINK_PAGO implements IscobolCall {
             if (argv == null || argv.length < TOTAL_ARGS) {
                 safeLog(Level.SEVERE,
                         "Cantidad de argumentos inválida: "
-                                + (argv == null ? 0 : argv.length),
+                        + (argv == null ? 0 : argv.length),
                         null);
                 return NumericVar.literal(9, false);
             }
 
             logInputsCompact(argv);
-            resultado = createPaymentLink(argv);
+
+            int cantItems = parseIntDef(getStr(argv, I_CANT_ITEMS), 0);
+            if (cantItems > 0) {
+                resultado = createPaymentLink(argv);
+            } else {
+                resultado = queryPaymentLink(argv);
+            }
 
         } catch (Exception e) {
             safeLog(Level.SEVERE, "Excepción general", e);
@@ -167,6 +173,18 @@ public class MP_LINK_PAGO implements IscobolCall {
         MpResult r = core(argv).createPaymentLink(in);
         writeOut(argv, r);
         return 0;
+    }
+
+    private int queryPaymentLink(CobolVar[] argv) {
+        String extRef = getStr(argv, I_EXT_REF);
+
+        if (isBlank(extRef)) {
+            return fail(argv, 4, "external_reference es obligatorio para query_payment");
+        }
+
+        MpResult r = core(argv).queryPaymentLink(extRef);
+        writeOut(argv, r);
+        return r != null ? r.res : 9;
     }
 
     private MpBridgeCore core(CobolVar[] argv) {
@@ -321,7 +339,9 @@ public class MP_LINK_PAGO implements IscobolCall {
     private void logInputsCompact(CobolVar[] argv) {
         try {
             logger.info("==== MP_LINK_PAGO INPUTS ====");
-            logger.info("external_reference=" + sanitize(getStr(argv, I_EXT_REF), 80)
+            int cantItems = parseIntDef(getStr(argv, I_CANT_ITEMS), 0);
+            logger.info("modo=" + (cantItems > 0 ? "CREATE" : "QUERY_PAYMENT")
+                    + " external_reference=" + sanitize(getStr(argv, I_EXT_REF), 80)
                     + " payer_email=" + sanitize(getStr(argv, I_PAYER_EMAIL), 80)
                     + " payer_name=" + sanitize(getStr(argv, I_PAYER_NAME), 80)
                     + " additional_info=" + sanitize(getStr(argv, I_ADDITIONAL_INFO), 120)

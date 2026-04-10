@@ -551,6 +551,82 @@ public class MpBridgeCore {
         }
     }
 
+    public MpResult queryPaymentLink(String externalReference) {
+        if (isBlank(externalReference)) {
+            return MpResult.error(4, "Falta external_reference");
+        }
+
+        String endpoint = cfg.get("mp.endpoint.searchPayments", "/v1/payments/search");
+
+        StringBuilder sb = new StringBuilder(endpoint);
+        if (endpoint.contains("?")) {
+            sb.append("&");
+        } else {
+            sb.append("?");
+        }
+        sb.append("sort=date_created");
+        sb.append("&criteria=desc");
+        sb.append("&range=date_created");
+        sb.append("&limit=1");
+        sb.append("&external_reference=").append(url(externalReference.trim()));
+
+        try {
+            MpHttp.MpHttpResponse r = http.get(sb.toString());
+
+            MpResult out = MpResult.ok();
+            out.id = externalReference.trim();
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP queryPaymentLink HTTP " + r.httpCode;
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+            JsonArray results = arr(mp.get("results"));
+
+            if (results == null || results.size() == 0) {
+                out.status = "pending";
+                out.msg = "SIN PAGOS";
+                return out;
+            }
+
+            JsonObject p0 = obj(results.get(0));
+            out.paymentId = getJsonStr(p0, "id");
+            out.status = getJsonStr(p0, "status");
+            if (isBlank(out.status)) {
+                out.status = "unknown";
+            }
+
+            String statusDetail = getJsonStr(p0, "status_detail");
+            String preferenceId = getJsonStr(p0, "order_id");
+            if (isBlank(preferenceId)) {
+                JsonObject order = obj(p0.get("order"));
+                preferenceId = getJsonStr(order, "id");
+            }
+            if (isBlank(preferenceId)) {
+                preferenceId = getJsonStr(p0, "preference_id");
+            }
+            out.preferenceId = preferenceId;
+
+            if ("approved".equalsIgnoreCase(out.status) || "authorized".equalsIgnoreCase(out.status)) {
+                out.msg = "PAGADO";
+            } else if ("pending".equalsIgnoreCase(out.status) || "in_process".equalsIgnoreCase(out.status)) {
+                out.msg = "PENDIENTE";
+            } else if ("rejected".equalsIgnoreCase(out.status) || "cancelled".equalsIgnoreCase(out.status) || "refunded".equalsIgnoreCase(out.status) || "charged_back".equalsIgnoreCase(out.status)) {
+                out.msg = isBlank(statusDetail) ? out.status.toUpperCase() : statusDetail;
+            } else {
+                out.msg = isBlank(statusDetail) ? "OK" : statusDetail;
+            }
+
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico queryPaymentLink: " + ex.getMessage());
+        }
+    }
+
     public MpResult createPaymentLink(PaymentLinkIn in) {
         try {
             MpResult v = validatePaymentLinkIn(in);
