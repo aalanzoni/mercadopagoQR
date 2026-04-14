@@ -156,10 +156,10 @@ public class MP_LINK_PAGO implements IscobolCall {
             }
 
             if (isBlank(itemTitle)) {
-                return fail(argv, 4, "El title del item " + n + " es obligatorio");
+                itemTitle = buildDefaultItemTitle(itemCode);
             }
             if (qty <= 0) {
-                return fail(argv, 4, "La quantity del item " + n + " debe ser mayor a 0");
+                qty = 1;
             }
             if (price <= 0d) {
                 return fail(argv, 4, "El unit_price del item " + n + " debe ser mayor a 0");
@@ -274,6 +274,39 @@ public class MP_LINK_PAGO implements IscobolCall {
 
     private String toMoneyString(double value) {
         return String.format(Locale.US, "%.2f", value);
+    }
+
+    private String buildDefaultItemTitle(String itemCode) {
+        String code = nn(itemCode).trim();
+        if (code.isEmpty()) {
+            return "Item sin titulo";
+        }
+
+        String[] parts = code.split("\\|", -1);
+        if (parts.length >= 4) {
+            String codigo = parts[0].trim();
+            String letra = parts[1].trim();
+            String sucursal = parts[2].trim();
+            String numero = parts[3].trim();
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("Comp.");
+            if (!codigo.isEmpty()) {
+                sb.append(" ").append(codigo);
+            }
+            if (!letra.isEmpty()) {
+                sb.append(" ").append(letra);
+            }
+            if (!sucursal.isEmpty()) {
+                sb.append(" Suc.").append(sucursal);
+            }
+            if (!numero.isEmpty()) {
+                sb.append(" Nro.").append(numero);
+            }
+            return sb.toString().trim();
+        }
+
+        return "Comp. " + code;
     }
 
     private boolean isBlank(String s) {
