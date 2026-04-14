@@ -17,6 +17,7 @@ public class MpResult {
     public String preferenceId;
     public String paymentLink;
     public String sandboxPaymentLink;
+    public String preferenceExternalReference;
 
     public static MpResult ok() {
         MpResult r = new MpResult();

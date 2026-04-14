@@ -15,6 +15,7 @@ public class PaymentLinkIn {
 
     public String expirationDateFrom;
     public String expirationDateTo;
+    public Integer expirationHours;
 
     public String idempotencyKey;
     

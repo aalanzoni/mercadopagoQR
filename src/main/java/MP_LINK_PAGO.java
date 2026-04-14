@@ -23,7 +23,13 @@ public class MP_LINK_PAGO implements IscobolCall {
 
     private static final int MAX_ITEMS = 12;
     private static final int ITEM_BLOCK = 5;
-    private static final int TOTAL_ARGS = 72;
+
+    // Contrato actualizado
+    // 00..05 : entradas fijas
+    // 06..65 : items (12 bloques x 5)
+    // 66..68 : nuevos inputs (idempotency / expiration_date_to / expiration_hours)
+    // 69..75 : outputs
+    private static final int TOTAL_ARGS = 76;
 
     // Entradas fijas
     private static final int I_EXT_REF = 0;
@@ -32,14 +38,19 @@ public class MP_LINK_PAGO implements IscobolCall {
     private static final int I_ADDITIONAL_INFO = 3;
     private static final int I_PATH = 4;
     private static final int I_CANT_ITEMS = 5;
+    private static final int I_FIRST_ITEM = 6;
+    private static final int I_IDEMPOTENCY = 66;
+    private static final int I_EXPIRATION_DATE_TO = 67;
+    private static final int I_EXPIRATION_HOURS = 68;
 
     // Salidas
-    private static final int O_RES = 66;
-    private static final int O_MSG = 67;
-    private static final int O_PREFERENCE_ID = 68;
-    private static final int O_PAYMENT_LINK = 69;
-    private static final int O_SANDBOX_LINK = 70;
-    private static final int O_RAW_JSON = 71;
+    private static final int O_RES = 69;
+    private static final int O_MSG = 70;
+    private static final int O_PREFERENCE_ID = 71;
+    private static final int O_PAYMENT_LINK = 72;
+    private static final int O_SANDBOX_LINK = 73;
+    private static final int O_RAW_JSON = 74;
+    private static final int O_PREF_EXTREF = 75;
 
     @Override
     public Object call(Object[] argv) {
@@ -97,6 +108,9 @@ public class MP_LINK_PAGO implements IscobolCall {
         String payerEmail = getStr(argv, I_PAYER_EMAIL);
         String payerName = getStr(argv, I_PAYER_NAME);
         String additionalInfo = getStr(argv, I_ADDITIONAL_INFO);
+        String idempotency = getStr(argv, I_IDEMPOTENCY);
+        String expirationDateTo = getStr(argv, I_EXPIRATION_DATE_TO);
+        int expirationHours = parseIntDef(getStr(argv, I_EXPIRATION_HOURS), 0);
         int cantItems = parseIntDef(getStr(argv, I_CANT_ITEMS), 0);
 
         if (isBlank(extRef)) {
@@ -114,10 +128,13 @@ public class MP_LINK_PAGO implements IscobolCall {
         in.payerEmail = payerEmail;
         in.payerName = payerName;
         in.additionalInfo = additionalInfo;
+        in.idempotencyKey = idempotency;
+        in.expirationDateTo = expirationDateTo;
+        in.expirationHours = expirationHours > 0 ? Integer.valueOf(expirationHours) : null;
         in.items = new ArrayList<PaymentLinkItemIn>();
 
         for (int n = 1; n <= cantItems; n++) {
-            int base = 6 + ((n - 1) * ITEM_BLOCK);
+            int base = I_FIRST_ITEM + ((n - 1) * ITEM_BLOCK);
 
             String itemCode = getStr(argv, base);
             String itemTitle = getStr(argv, base + 1);
@@ -203,6 +220,7 @@ public class MP_LINK_PAGO implements IscobolCall {
         setOut(argv, O_PAYMENT_LINK, r != null ? nn(r.paymentLink) : "");
         setOut(argv, O_SANDBOX_LINK, r != null ? nn(r.sandboxPaymentLink) : "");
         setOut(argv, O_RAW_JSON, r != null ? nn(r.rawJson) : "");
+        setOut(argv, O_PREF_EXTREF, r != null ? nn(r.preferenceExternalReference) : "");
     }
 
     private int fail(CobolVar[] argv, int code, String msg) {
@@ -212,6 +230,7 @@ public class MP_LINK_PAGO implements IscobolCall {
         setOut(argv, O_PAYMENT_LINK, "");
         setOut(argv, O_SANDBOX_LINK, "");
         setOut(argv, O_RAW_JSON, "");
+        setOut(argv, O_PREF_EXTREF, "");
         return code;
     }
 
@@ -346,6 +365,9 @@ public class MP_LINK_PAGO implements IscobolCall {
                     + " payer_name=" + sanitize(getStr(argv, I_PAYER_NAME), 80)
                     + " additional_info=" + sanitize(getStr(argv, I_ADDITIONAL_INFO), 120)
                     + " cant_items=" + sanitize(getStr(argv, I_CANT_ITEMS), 10)
+                    + " idempotency=" + sanitize(getStr(argv, I_IDEMPOTENCY), 80)
+                    + " expiration_date_to=" + sanitize(getStr(argv, I_EXPIRATION_DATE_TO), 80)
+                    + " expiration_hours=" + sanitize(getStr(argv, I_EXPIRATION_HOURS), 10)
                     + " path=" + sanitize(getStr(argv, I_PATH), 200));
         } catch (Exception e) {
             safeLog(Level.WARNING, "No se pudieron loguear inputs", e);
@@ -360,6 +382,7 @@ public class MP_LINK_PAGO implements IscobolCall {
             logger.info("preference_id=" + sanitize(getStr(argv, O_PREFERENCE_ID), 80));
             logger.info("payment_link=" + sanitize(getStr(argv, O_PAYMENT_LINK), 200));
             logger.info("sandbox_link=" + sanitize(getStr(argv, O_SANDBOX_LINK), 200));
+            logger.info("pref_extref=" + sanitize(getStr(argv, O_PREF_EXTREF), 120));
             logger.info("raw_json_len=" + getStr(argv, O_RAW_JSON).length());
         } catch (Exception e) {
             safeLog(Level.WARNING, "No se pudieron loguear outputs", e);

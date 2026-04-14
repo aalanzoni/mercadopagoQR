@@ -16,6 +16,9 @@ import com.hs.dto.MpResult;
 import com.hs.dto.PaymentLinkIn;
 import com.hs.dto.PaymentLinkItemIn;
 import java.util.List;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Capa de negocio/armado de JSON para Mercado Pago.
@@ -564,11 +567,11 @@ public class MpBridgeCore {
         } else {
             sb.append("?");
         }
-        sb.append("sort=date_created");
+        sb.append("external_reference=").append(url(externalReference.trim()));
+        sb.append("&sort=date_created");
         sb.append("&criteria=desc");
         sb.append("&range=date_created");
-        sb.append("&limit=1");
-        sb.append("&external_reference=").append(url(externalReference.trim()));
+        sb.append("&limit=50");
 
         try {
             MpHttp.MpHttpResponse r = http.get(sb.toString());
@@ -576,6 +579,7 @@ public class MpBridgeCore {
             MpResult out = MpResult.ok();
             out.id = externalReference.trim();
             out.rawJson = r.body;
+            out.preferenceExternalReference = externalReference.trim();
 
             if (r.httpCode < 200 || r.httpCode >= 300) {
                 out.res = 5;
@@ -592,7 +596,13 @@ public class MpBridgeCore {
                 return out;
             }
 
-            JsonObject p0 = obj(results.get(0));
+            JsonObject p0 = selectBestPayment(results);
+            if (p0 == null) {
+                out.status = "unknown";
+                out.msg = "SIN PAGOS";
+                return out;
+            }
+
             out.paymentId = getJsonStr(p0, "id");
             out.status = getJsonStr(p0, "status");
             if (isBlank(out.status)) {
@@ -609,6 +619,10 @@ public class MpBridgeCore {
                 preferenceId = getJsonStr(p0, "preference_id");
             }
             out.preferenceId = preferenceId;
+            out.preferenceExternalReference = firstNonBlank(
+                    getJsonStr(p0, "external_reference"),
+                    out.preferenceExternalReference,
+                    externalReference.trim());
 
             if ("approved".equalsIgnoreCase(out.status) || "authorized".equalsIgnoreCase(out.status)) {
                 out.msg = "PAGADO";
@@ -648,6 +662,7 @@ public class MpBridgeCore {
 
             MpResult out = MpResult.ok();
             out.rawJson = r.body;
+            out.preferenceExternalReference = safeText(in.externalReference);
 
             if (r.httpCode < 200 || r.httpCode >= 300) {
                 out.res = 5;
@@ -661,6 +676,10 @@ public class MpBridgeCore {
             out.id = out.preferenceId;
             out.paymentLink = getJsonStr(mp, "init_point");
             out.sandboxPaymentLink = getJsonStr(mp, "sandbox_init_point");
+            out.preferenceExternalReference = firstNonBlank(
+                    getJsonStr(mp, "external_reference"),
+                    out.preferenceExternalReference,
+                    safeText(in.externalReference));
             out.msg = "OK";
 
             return out;
@@ -767,6 +786,67 @@ public class MpBridgeCore {
         }
 
         return body;
+    }
+
+    private JsonObject selectBestPayment(JsonArray results) {
+        if (results == null || results.size() == 0) {
+            return null;
+        }
+
+        JsonObject approved = null;
+        JsonObject authorized = null;
+        JsonObject pending = null;
+        JsonObject latest = null;
+        String latestDate = "";
+
+        for (int i = 0; i < results.size(); i++) {
+            JsonObject candidate = obj(results.get(i));
+            if (candidate == null) {
+                continue;
+            }
+
+            String status = getJsonStr(candidate, "status");
+            String dateCreated = getJsonStr(candidate, "date_created");
+
+            if (approved == null && "approved".equalsIgnoreCase(status)) {
+                approved = candidate;
+            }
+            if (authorized == null && "authorized".equalsIgnoreCase(status)) {
+                authorized = candidate;
+            }
+            if (pending == null
+                    && ("pending".equalsIgnoreCase(status) || "in_process".equalsIgnoreCase(status))) {
+                pending = candidate;
+            }
+
+            if (latest == null || (!isBlank(dateCreated) && dateCreated.compareTo(latestDate) > 0)) {
+                latest = candidate;
+                latestDate = isBlank(dateCreated) ? latestDate : dateCreated;
+            }
+        }
+
+        if (approved != null) {
+            return approved;
+        }
+        if (authorized != null) {
+            return authorized;
+        }
+        if (pending != null) {
+            return pending;
+        }
+        return latest;
+    }
+
+    private String resolveExpirationDateTo(String expirationDateTo, Integer expirationHours) {
+        if (!isBlank(expirationDateTo)) {
+            return safeText(expirationDateTo);
+        }
+        if (expirationHours != null && expirationHours.intValue() > 0) {
+            OffsetDateTime odt = OffsetDateTime.now(ZoneId.of("America/Argentina/Cordoba"))
+                    .plusHours(expirationHours.longValue());
+            return odt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+        }
+        return "";
     }
 
     private String buildInstallmentsSummary(List<PaymentLinkItemIn> items) {
@@ -972,7 +1052,15 @@ public class MpBridgeCore {
         }
     }
 
-    private static String firstNonBlank(String a, String b) {
-        return !isBlank(a) ? a : (!isBlank(b) ? b : "");
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+}
+        for (String value : values) {
+            if (!isBlank(value)) {
+                return value;
+            }
+        }
+        return "";
     }
 }
