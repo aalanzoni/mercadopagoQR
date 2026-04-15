@@ -8,6 +8,9 @@ import com.iscobol.rts.IscobolCall;
 import com.iscobol.types.CobolVar;
 import com.iscobol.types.NumericVar;
 import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.logging.FileHandler;
@@ -29,7 +32,7 @@ public class MP_LINK_PAGO implements IscobolCall {
     // 06..65 : items (12 bloques x 5)
     // 66..68 : nuevos inputs (idempotency / expiration_date_to / expiration_hours)
     // 69..75 : outputs
-    private static final int TOTAL_ARGS = 76;
+    private static final int MIN_ARGS = 76;
 
     // Entradas fijas
     private static final int I_EXT_REF = 0;
@@ -51,6 +54,10 @@ public class MP_LINK_PAGO implements IscobolCall {
     private static final int O_SANDBOX_LINK = 73;
     private static final int O_RAW_JSON = 74;
     private static final int O_PREF_EXTREF = 75;
+    private static final int O_EFFECTIVE_EXPIRATION_TO = 76;
+
+    private static final DateTimeFormatter EXPIRATION_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     @Override
     public Object call(Object[] argv) {
@@ -67,7 +74,7 @@ public class MP_LINK_PAGO implements IscobolCall {
         initLoggerPerCall();
 
         try {
-            if (argv == null || argv.length < TOTAL_ARGS) {
+            if (argv == null || argv.length < MIN_ARGS) {
                 safeLog(Level.SEVERE,
                         "Cantidad de argumentos inválida: "
                         + (argv == null ? 0 : argv.length),
@@ -91,7 +98,7 @@ public class MP_LINK_PAGO implements IscobolCall {
 
         } finally {
             try {
-                if (argv != null && argv.length >= TOTAL_ARGS) {
+                if (argv != null && argv.length >= MIN_ARGS) {
                     logOutputsCompact(argv);
                 }
             } catch (Exception ignored) {
@@ -138,6 +145,9 @@ public class MP_LINK_PAGO implements IscobolCall {
 
             String itemCode = getStr(argv, base);
             String itemTitle = getStr(argv, base + 1);
+//            if (itemTitle.isEmpty()){
+//                itemTitle = buildDefaultItemTitle(itemCodigo, itemLetra, itemSucursal, itemNumero);
+//            }
             String itemDesc = getStr(argv, base + 2);
             String itemQtyRaw = getStr(argv, base + 3);
             String itemPriceRaw = getStr(argv, base + 4);
@@ -155,14 +165,14 @@ public class MP_LINK_PAGO implements IscobolCall {
                 continue;
             }
 
-            if (isBlank(itemTitle)) {
-                itemTitle = buildDefaultItemTitle(itemCode);
-            }
             if (qty <= 0) {
                 qty = 1;
             }
             if (price <= 0d) {
                 return fail(argv, 4, "El unit_price del item " + n + " debe ser mayor a 0");
+            }
+            if (isBlank(itemTitle)) {
+                itemTitle = "Item " + n;
             }
 
             if (logger != null) {
@@ -187,8 +197,13 @@ public class MP_LINK_PAGO implements IscobolCall {
             return fail(argv, 4, "No se informaron items válidos");
         }
 
+        String effectiveExpirationTo =
+                resolveEffectiveExpirationTo(expirationDateTo, expirationHours);
+
         MpResult r = core(argv).createPaymentLink(in);
         writeOut(argv, r);
+        setOptionalEffectiveExpirationOut(argv,
+                r != null && r.res == 0 ? effectiveExpirationTo : "");
         return 0;
     }
 
@@ -201,6 +216,7 @@ public class MP_LINK_PAGO implements IscobolCall {
 
         MpResult r = core(argv).queryPaymentLink(extRef);
         writeOut(argv, r);
+        setOptionalEffectiveExpirationOut(argv, "");
         return r != null ? r.res : 9;
     }
 
@@ -231,7 +247,51 @@ public class MP_LINK_PAGO implements IscobolCall {
         setOut(argv, O_SANDBOX_LINK, "");
         setOut(argv, O_RAW_JSON, "");
         setOut(argv, O_PREF_EXTREF, "");
+        setOptionalEffectiveExpirationOut(argv, "");
         return code;
+    }
+
+
+    private void setOptionalEffectiveExpirationOut(CobolVar[] argv, String value) {
+        if (argv != null && argv.length > O_EFFECTIVE_EXPIRATION_TO) {
+            setOut(argv, O_EFFECTIVE_EXPIRATION_TO, value);
+        }
+    }
+
+    private String resolveEffectiveExpirationTo(String expirationDateTo,
+            int expirationHours) {
+        if (!isBlank(expirationDateTo)) {
+            String normalized = normalizeExpirationDateTo(expirationDateTo);
+            if (!isBlank(normalized)) {
+                return normalized;
+            }
+        }
+
+        if (expirationHours > 0) {
+            return LocalDateTime.now().plusHours(expirationHours)
+                    .format(EXPIRATION_FMT);
+        }
+
+        return "";
+    }
+
+    private String normalizeExpirationDateTo(String expirationDateTo) {
+        String value = nn(expirationDateTo).trim();
+        if (value.isEmpty()) {
+            return "";
+        }
+
+        try {
+            if (value.length() >= 19) {
+                String base = value.substring(0, 19);
+                return LocalDateTime.parse(base, EXPIRATION_FMT)
+                        .format(EXPIRATION_FMT);
+            }
+            return LocalDateTime.parse(value, EXPIRATION_FMT)
+                    .format(EXPIRATION_FMT);
+        } catch (DateTimeParseException e) {
+            return "";
+        }
     }
 
     private String getStr(CobolVar[] argv, int idx) {
@@ -276,37 +336,48 @@ public class MP_LINK_PAGO implements IscobolCall {
         return String.format(Locale.US, "%.2f", value);
     }
 
-    private String buildDefaultItemTitle(String itemCode) {
-        String code = nn(itemCode).trim();
-        if (code.isEmpty()) {
-            return "Item sin titulo";
-        }
+    private String buildItemCode(String codigo, String letra,
+            String sucursal, String numero) {
+        return nn(codigo).trim()
+                + "|" + nn(letra).trim()
+                + "|" + nn(sucursal).trim()
+                + "|" + nn(numero).trim();
+    }
 
-        String[] parts = code.split("\\|", -1);
-        if (parts.length >= 4) {
-            String codigo = parts[0].trim();
-            String letra = parts[1].trim();
-            String sucursal = parts[2].trim();
-            String numero = parts[3].trim();
-
+    private String buildDefaultItemTitle(String codigo, String letra,
+            String sucursal, String numero) {
             StringBuilder sb = new StringBuilder();
             sb.append("Comp.");
-            if (!codigo.isEmpty()) {
-                sb.append(" ").append(codigo);
+        if (!isBlank(codigo)) {
+            sb.append(" ").append(nn(codigo).trim());
             }
-            if (!letra.isEmpty()) {
-                sb.append(" ").append(letra);
+        if (!isBlank(letra)) {
+            sb.append(" ").append(nn(letra).trim());
             }
-            if (!sucursal.isEmpty()) {
-                sb.append(" Suc.").append(sucursal);
+        if (!isBlank(sucursal)) {
+            sb.append(" Suc.").append(nn(sucursal).trim());
             }
-            if (!numero.isEmpty()) {
-                sb.append(" Nro.").append(numero);
+        if (!isBlank(numero)) {
+            sb.append(" Nro.").append(nn(numero).trim());
             }
             return sb.toString().trim();
         }
 
-        return "Comp. " + code;
+    private String buildDefaultItemDescription(String fechaFiscal,
+            String keyHistor) {
+        StringBuilder sb = new StringBuilder();
+
+        if (!isBlank(fechaFiscal)) {
+            sb.append("Periodo ").append(nn(fechaFiscal).trim());
+        }
+        if (!isBlank(keyHistor)) {
+            if (sb.length() > 0) {
+                sb.append(" - ");
+            }
+            sb.append("Histor ").append(nn(keyHistor).trim());
+        }
+
+        return sb.toString();
     }
 
     private boolean isBlank(String s) {
