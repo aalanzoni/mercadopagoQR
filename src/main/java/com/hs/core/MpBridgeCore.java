@@ -1063,4 +1063,177 @@ public class MpBridgeCore {
         }
         return "";
     }
+
+    // ===========================================================
+    // Point — métodos para agregar a MpBridgeCore
+    // ===========================================================
+    //
+    // API MP Point:
+    //   O  ->  POST /point/integration-api/devices/{device_id}/payment-intents
+    //   Q  ->  GET  /point/integration-api/payment-intents/{payment_intent_id}
+    //   X  ->  DELETE /point/integration-api/devices/{device_id}/payment-intents
+    //
+    // El device_id va siempre en la URL.
+    // El payment_intent_id (order_id en MpResult) se obtiene en la acción O
+    // y se usa como entrada en Q y X.
+    // ===========================================================
+
+    /**
+     * Crea un payment intent en el dispositivo Point indicado.
+     * Endpoint: POST /point/integration-api/devices/{device_id}/payment-intents
+     */
+    public MpResult createPointIntent(PointIn in) {
+        if (in == null) {
+            return MpResult.error(4, "Falta input");
+        }
+        if (isBlank(in.deviceId)) {
+            return MpResult.error(4, "Falta device_id");
+        }
+        if (isBlank(in.externalReference)) {
+            return MpResult.error(4, "Falta external_reference");
+        }
+        if (isBlank(in.totalAmount)) {
+            return MpResult.error(4, "Falta total_amount");
+        }
+
+        String endpointFmt = cfg.get(
+            "mp.endpoint.point.createIntent",
+            "/point/integration-api/devices/%s/payment-intents"
+        );
+        String endpoint = String.format(endpointFmt, in.deviceId.trim());
+
+        String idem = isBlank(in.idempotencyKey)
+            ? in.externalReference.trim()
+            : in.idempotencyKey.trim();
+
+        JsonObject body = new JsonObject();
+        body.addProperty("amount",             parseDoubleSafe(in.totalAmount));
+        body.addProperty("description",        nvl(in.description));
+        body.addProperty("payment_mode",       "point_of_sale");
+        body.addProperty("external_reference", in.externalReference.trim());
+
+        // additional_info requerido por MP Point
+        JsonObject additionalInfo = new JsonObject();
+        additionalInfo.addProperty("external_reference", in.externalReference.trim());
+        body.add("additional_info", additionalInfo);
+
+        try {
+            MpHttp.MpHttpResponse r = http.postJson(endpoint, gson.toJson(body), idem);
+
+            MpResult out = MpResult.ok();
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP Point createIntent HTTP " + r.httpCode + " - " + nvl(r.body);
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+            out.id     = getJsonStr(mp, "id");       // payment_intent_id
+            out.status = getJsonStr(mp, "state");
+            out.msg    = "OK";
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico createPointIntent: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Consulta el estado de un payment intent.
+     * Endpoint: GET /point/integration-api/payment-intents/{payment_intent_id}
+     */
+    public MpResult getPointIntent(String paymentIntentId) {
+        if (isBlank(paymentIntentId)) {
+            return MpResult.error(4, "Falta payment_intent_id");
+        }
+
+        String endpointFmt = cfg.get(
+            "mp.endpoint.point.getIntent",
+            "/point/integration-api/payment-intents/%s"
+        );
+        String endpoint = String.format(endpointFmt, paymentIntentId.trim());
+
+        try {
+            MpHttp.MpHttpResponse r = http.get(endpoint);
+
+            MpResult out = MpResult.ok();
+            out.id     = paymentIntentId.trim();
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP Point getIntent HTTP " + r.httpCode;
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+            out.status = getJsonStr(mp, "state");
+
+            // payment_id: dentro de payment.id si el pago fue aprobado
+            try {
+                JsonObject payment = obj(mp.get("payment"));
+                if (payment != null) {
+                    out.paymentId = getJsonStr(payment, "id");
+                }
+            } catch (Exception ignored) { }
+
+            // "FINISHED" con payment.id => pago confirmado
+            // "CANCELED" / "ERROR" => no se cobró
+            // "OPEN"    => pendiente (el cliente aún no pasó la tarjeta)
+            out.msg = "OK";
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico getPointIntent: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Cancela el payment intent activo en el dispositivo Point.
+     * Endpoint: DELETE /point/integration-api/devices/{device_id}/payment-intents
+     * No requiere body. Solo el device_id en la URL.
+     */
+    public MpResult cancelPointIntent(String deviceId) {
+        if (isBlank(deviceId)) {
+            return MpResult.error(4, "Falta device_id");
+        }
+
+        String endpointFmt = cfg.get(
+            "mp.endpoint.point.cancelIntent",
+            "/point/integration-api/devices/%s/payment-intents"
+        );
+        String endpoint = String.format(endpointFmt, deviceId.trim());
+
+        try {
+            MpHttp.MpHttpResponse r = http.delete(endpoint);
+
+            MpResult out = MpResult.ok();
+            out.rawJson = r.body;
+
+            // 404 = no hay intent activo en el device (ya cancelado o nunca existió)
+            if (r.httpCode == 404) {
+                out.res = 2;
+                out.msg = "No hay intent activo en el dispositivo";
+                out.status = "CANCELED";
+                return out;
+            }
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP Point cancelIntent HTTP " + r.httpCode;
+                return out;
+            }
+
+            out.status = "CANCELED";
+            out.msg    = "Cancelado";
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico cancelPointIntent: " + ex.getMessage());
+        }
+    }
 }
+
+
