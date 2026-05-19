@@ -142,6 +142,10 @@ public class MpConfig {
         return v.equals("true") || v.equals("1") || v.equals("yes") || v.equals("on");
     }
 
+    public boolean onlyDebitAndAccountMoney() {
+        return getBoolean("mp.only_debit_account_money", false);
+    }
+
     public boolean logHttp() {
         if (logHttp == null) {
             logHttp = getBoolean("mp.log.http", false);

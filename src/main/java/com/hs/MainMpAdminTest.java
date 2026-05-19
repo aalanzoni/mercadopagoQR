@@ -3,17 +3,12 @@ package com.hs;
 import com.hs.config.MpConfig;
 import com.hs.core.MpBridgeCore;
 import com.hs.dto.MpResult;
-import com.hs.dto.PosIn;
-import com.hs.dto.SearchIn;
-import com.hs.dto.StoreIn;
-import com.hs.http.MpHttpClient;
-import java.util.UUID;
-import java.util.logging.Logger;
-
+import com.hs.dto.OrderIn;
 import com.hs.dto.PaymentLinkIn;
 import com.hs.dto.PaymentLinkItemIn;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * Test manual por consola de métodos de MpBridgeCore (Admin: S/LS/P/LP).
@@ -22,92 +17,78 @@ import java.util.List;
  */
 public class MainMpAdminTest {
 
-//    public static void main(String[] args) {
-//        try {
-//            // 1) Properties: por args[0] o por -Dmp.config
-//            if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
-//                System.setProperty("mp.config", args[0].trim());
-//            }
-//
-//            MpConfig cfg = MpConfig.load();
-//            MpHttpClient httpClient = new MpHttpClient(cfg);
-//            MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
-//
-//            // ====== Datos de prueba (cambiá a gusto) ======
-//            String storeExternalId = "SUCURSAL999";
-//            String storeName = "Sucursal 999";
-//            String posExternalId = "SUCURSAL999PDV001";
-//            String posName = "Caja 999";
-//
-//            // ====== 1) CREATE_STORE ======
-//            StoreIn s = new StoreIn();
-//            s.name = storeName;
-//            s.externalId = storeExternalId;
-//            s.street = "Av Siempre Viva";
-//            s.streetNumber = "123";
-//            s.city = "Córdoba";
-//            s.state = "Córdoba";
-//            s.latitude = "-31.4167";
-//            s.longitude = "-64.1833";
-//            s.idempotencyKey = "STORE-" + UUID.randomUUID();
-//
-//            System.out.println("===== CREATE_STORE =====");
-//            MpResult rs = core.createStore(s);
-//            dump(rs);
-//
-//            if (rs.res != 0) {
-//                System.out.println("ERROR creando store. Corto la prueba.");
-//                return;
-//            }
-//
-//            long storeId = parseLongSafe(rs.id);
-//            if (storeId <= 0) {
-//                System.out.println("No pude extraer store_id del response. Corto la prueba.");
-//                return;
-//            }
-//
-//            // ====== 2) SEARCH_STORES ======
-//            System.out.println("\n===== SEARCH_STORES =====");
-//            SearchIn ss = new SearchIn();
-//            ss.limit = 50;
-//            ss.offset = 0;
-//            ss.filterExternalId = storeExternalId;
-//            MpResult rls = core.searchStores(cfg.userId(), ss);
-//            dump(rls);
-//
-//            // ====== 3) CREATE_POS ======
-//            System.out.println("\n===== CREATE_POS =====");
-//            PosIn p = new PosIn();
-//            p.name = posName;
-//            p.externalId = posExternalId;
-//            p.storeId = storeId;
-//            p.idempotencyKey = "POS-" + UUID.randomUUID();
-//            MpResult rp = core.createPos(p);
-//            dump(rp);
-//
-//            // ====== 4) SEARCH_POS ======
-//            System.out.println("\n===== SEARCH_POS =====");
-//            SearchIn sp = new SearchIn();
-//            sp.limit = 50;
-//            sp.offset = 0;
-//            sp.filterExternalId = posExternalId;
-//            MpResult rlp = core.searchPos(sp);
-//            dump(rlp);
-//
-//            httpClient.closeQuietly();
-//
-//        } catch (Exception e) {
-//            System.out.println("ERROR general: " + e.getMessage());
-//            e.printStackTrace();
-//        }
-//    }
+
+    // -----------------------------------------------------------------------
+    // Ejecutar este main para reproducir el bug de cancel 400.
+    // Pasa la ruta al .properties como args[0] o como -Dmp.config=<ruta>.
+    // -----------------------------------------------------------------------
     public static void main(String[] args) {
+        if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
+            System.setProperty("mp.config", args[0].trim());
+        }
+        testCancelOrder();
+    }
+
+    private static void testCancelOrder() {
+        try {
+            MpConfig cfg = MpConfig.load();
+            MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_CANCEL_TEST"));
+
+            String extRef = "TEST-CANCEL-" + System.currentTimeMillis();
+            String idem   = "IDEM-" + extRef;
+
+            // 1) Crear orden
+            System.out.println("===== CREATE_ORDER =====");
+            OrderIn in = new OrderIn();
+            in.externalReference = extRef;
+            in.description       = "Orden de prueba cancel";
+            in.externalPosId     = "caja01ofhs";
+            in.mode              = "dynamic";
+            in.totalAmount       = "100.00";
+            in.unitMeasure       = "unit";
+            in.itemTitle         = "Item test";
+            in.externalCode      = "ITEM-TEST";
+            in.idempotencyKey    = idem;
+            MpResult rCreate = core.createOrder(in);
+            dump(rCreate);
+
+            if (rCreate.res != 0) {
+                System.out.println("ERROR creando orden. Se corta la prueba.");
+                return;
+            }
+
+            String orderId = rCreate.id;
+            System.out.println("order_id=" + orderId);
+
+            // 2) Consultar estado inmediatamente
+            System.out.println("\n===== GET_ORDER (antes de cancelar) =====");
+            MpResult rGet1 = core.getOrder(orderId);
+            dump(rGet1);
+
+            // 3) Cancelar
+            System.out.println("\n===== CANCEL_ORDER =====");
+            MpResult rCancel = core.cancelOrder(orderId, "CANCEL-" + idem);
+            dump(rCancel);
+
+            // 4) Consultar estado después de cancelar (ver si MP lo marcó cancelled igual)
+            System.out.println("\n===== GET_ORDER (después de cancelar) =====");
+            MpResult rGet2 = core.getOrder(orderId);
+            dump(rGet2);
+
+        } catch (Exception e) {
+            System.out.println("ERROR general: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private static void testPaymentLink() {
         try {
             MpConfig cfg = MpConfig.load();
 //            MpBridgeCore core = new MpBridgeCore(cfg);
             MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
             PaymentLinkIn in = new PaymentLinkIn();
-            in.externalReference = "COB-TEST-20260318-0004";
+            in.externalReference = "COB-TEST-20260519-0004";
             in.payerName = "Socio de Prueba";
             in.payerEmail = "aalanzoni@gmail.com";
             in.notificationUrl = "";
@@ -116,7 +97,7 @@ public class MainMpAdminTest {
             in.backUrlFailure = "";
             in.expirationDateFrom = "";
             in.expirationDateTo = "";
-            in.idempotencyKey = "IDEMP-COB-TEST-20260318-0004";
+            in.idempotencyKey = "IDEMP-COB-TEST-20260519-0004";
 
             List<PaymentLinkItemIn> items = new ArrayList<PaymentLinkItemIn>();
 

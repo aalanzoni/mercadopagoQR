@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\A2JTMP\\\\git_test\\\\mercadopagoQR\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(mvn clean *)"
+    ]
+  }
+}

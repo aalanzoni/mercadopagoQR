@@ -95,6 +95,10 @@ public class MpBridgeCore {
         items.add(it);
         body.add("items", items);
 
+        if (cfg.onlyDebitAndAccountMoney()) {
+            body.add("payment_methods", buildDebitAccountMoneyOnly());
+        }
+
         try {
             MpHttp.MpHttpResponse r = http.postJson(endpoint, gson.toJson(body), idem);
 
@@ -198,7 +202,7 @@ public class MpBridgeCore {
             // La orden queda efectivamente cancelada del lado de MP.
             // En produccion el cancel devuelve 2xx normalmente.
             if (r.httpCode == 500) {
-            out.status = "cancelled";
+                out.status = "canceled";
                 out.msg = "Cancelada (HTTP 500 ignorado - bug testing MP)";
                 return out;
             }
@@ -209,7 +213,9 @@ public class MpBridgeCore {
                 return out;
             }
 
-            out.status = "cancelled";
+            JsonObject mp = safeObj(r.body);
+            out.status = getJsonStr(mp, "status");
+            out.paymentId = extractPaymentId(mp);
             out.msg = "Cancelada";
             return out;
 
@@ -790,7 +796,23 @@ public class MpBridgeCore {
             }
         }
 
+        if (cfg.onlyDebitAndAccountMoney()) {
+            body.add("payment_methods", buildDebitAccountMoneyOnly());
+        }
+
         return body;
+    }
+
+    private JsonObject buildDebitAccountMoneyOnly() {
+        JsonObject pm = new JsonObject();
+        JsonArray excluded = new JsonArray();
+        for (String type : new String[]{"credit_card", "ticket", "atm", "prepaid_card"}) {
+            JsonObject t = new JsonObject();
+            t.addProperty("id", type);
+            excluded.add(t);
+        }
+        pm.add("excluded_payment_types", excluded);
+        return pm;
     }
 
     private JsonObject selectBestPayment(JsonArray results) {
