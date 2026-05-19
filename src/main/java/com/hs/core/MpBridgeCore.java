@@ -95,10 +95,6 @@ public class MpBridgeCore {
         items.add(it);
         body.add("items", items);
 
-        if (cfg.onlyDebitAndAccountMoney()) {
-            body.add("payment_methods", buildDebitAccountMoneyOnly());
-        }
-
         try {
             MpHttp.MpHttpResponse r = http.postJson(endpoint, gson.toJson(body), idem);
 

@@ -1,4 +1,3 @@
-import com.hs.bridge.MpOutWriter;
 import com.hs.config.MpConfig;
 import com.hs.core.MpBridgeCore;
 import com.hs.dto.MpResult;
