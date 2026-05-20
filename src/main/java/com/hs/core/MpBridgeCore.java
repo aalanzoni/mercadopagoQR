@@ -194,12 +194,19 @@ public class MpBridgeCore {
                 return out;
             }
 
-            // HTTP 500 en cancel es un bug conocido del entorno de testing de MP.
-            // La orden queda efectivamente cancelada del lado de MP.
-            // En produccion el cancel devuelve 2xx normalmente.
-            if (r.httpCode == 500) {
-                out.status = "canceled";
-                out.msg = "Cancelada (HTTP 500 ignorado - bug testing MP)";
+            // HTTP 500 o 400/in_store_order_delete_error son bugs conocidos del sandbox de MP.
+            // La orden puede quedar efectivamente cancelada del lado de MP igual.
+            // Se verifica el estado real con un getOrder antes de responder.
+            if (r.httpCode == 500 || (r.httpCode == 400 && nvl(r.body).contains("in_store_order_delete_error"))) {
+                MpResult verify = getOrder(orderId.trim());
+                if (verify.res == 0 && "canceled".equalsIgnoreCase(verify.status)) {
+                    out.status = "canceled";
+                    out.paymentId = verify.paymentId;
+                    out.msg = "Cancelada (HTTP " + r.httpCode + " ignorado - bug sandbox MP)";
+                    return out;
+                }
+                out.res = 5;
+                out.msg = "MP cancelOrder HTTP " + r.httpCode;
                 return out;
             }
 
