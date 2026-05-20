@@ -26,7 +26,61 @@ public class MainMpAdminTest {
         if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
             System.setProperty("mp.config", args[0].trim());
         }
-        testCancelOrder();
+        testDobleOrden();
+    }
+
+    private static void testDobleOrden() {
+        try {
+            MpConfig cfg = MpConfig.load();
+            MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_DOBLE_ORDEN_TEST"));
+
+            long ts = System.currentTimeMillis();
+
+            // 1) Crear orden 1 ($100) — no se cancela
+            System.out.println("===== CREATE_ORDER 1 ($100) =====");
+            OrderIn in1 = new OrderIn();
+            in1.externalReference = "TEST-DOBLE-A-" + ts;
+            in1.description       = "Orden 1 de prueba doble";
+            in1.externalPosId     = "caja01ofhs";
+            in1.mode              = "dynamic";
+            in1.totalAmount       = "100.00";
+            in1.unitMeasure       = "unit";
+            in1.itemTitle         = "Item test 1";
+            in1.externalCode      = "ITEM-TEST-1";
+            in1.idempotencyKey    = "IDEM-A-" + ts;
+            MpResult r1 = core.createOrder(in1);
+            dump(r1);
+
+            if (r1.res != 0) {
+                System.out.println("ERROR creando orden 1. Se corta la prueba.");
+                return;
+            }
+            System.out.println("order_id_1=" + r1.id);
+
+            // 2) Sin cancelar la orden 1, crear orden 2 ($150) en el mismo POS
+            System.out.println("\n===== CREATE_ORDER 2 ($150) - misma caja, sin cancelar la anterior =====");
+            OrderIn in2 = new OrderIn();
+            in2.externalReference = "TEST-DOBLE-B-" + ts;
+            in2.description       = "Orden 2 de prueba doble";
+            in2.externalPosId     = "caja01ofhs";
+            in2.mode              = "dynamic";
+            in2.totalAmount       = "150.00";
+            in2.unitMeasure       = "unit";
+            in2.itemTitle         = "Item test 2";
+            in2.externalCode      = "ITEM-TEST-2";
+            in2.idempotencyKey    = "IDEM-B-" + ts;
+            MpResult r2 = core.createOrder(in2);
+            dump(r2);
+
+            // 3) Consultar el estado de la orden 1 para ver si MP la canceló automáticamente
+            System.out.println("\n===== GET_ORDER 1 (estado después de crear orden 2) =====");
+            MpResult rGet1 = core.getOrder(r1.id);
+            dump(rGet1);
+
+        } catch (Exception e) {
+            System.out.println("ERROR general: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private static void testCancelOrder() {
@@ -65,15 +119,28 @@ public class MainMpAdminTest {
             MpResult rGet1 = core.getOrder(orderId);
             dump(rGet1);
 
-            // 3) Cancelar
-            System.out.println("\n===== CANCEL_ORDER =====");
+            // 3) Cancelar (intento 1)
+            System.out.println("\n===== CANCEL_ORDER (intento 1) =====");
             MpResult rCancel = core.cancelOrder(orderId, "CANCEL-" + idem);
             dump(rCancel);
 
-            // 4) Consultar estado después de cancelar (ver si MP lo marcó cancelled igual)
-            System.out.println("\n===== GET_ORDER (después de cancelar) =====");
+            // 4) Consultar estado después del intento 1
+            System.out.println("\n===== GET_ORDER (después intento 1) =====");
             MpResult rGet2 = core.getOrder(orderId);
             dump(rGet2);
+
+            // 5) Si falló y la orden sigue activa, reintentar con nueva idem key
+            if (rCancel.res != 0 && "created".equalsIgnoreCase(rGet2.status)) {
+                System.out.println("\n===== CANCEL_ORDER (intento 2 - reintento) =====");
+                MpResult rCancel2 = core.cancelOrder(orderId, "CANCEL2-" + idem);
+                dump(rCancel2);
+
+                System.out.println("\n===== GET_ORDER (después intento 2) =====");
+                MpResult rGet3 = core.getOrder(orderId);
+                dump(rGet3);
+            } else {
+                System.out.println("\n[No se reintentó: cancel ok o la orden ya no está en created]");
+            }
 
         } catch (Exception e) {
             System.out.println("ERROR general: " + e.getMessage());
