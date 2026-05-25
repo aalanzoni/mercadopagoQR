@@ -8,6 +8,7 @@ public class MpResult {
     public String qrData;
     public String status;
     public String paymentId;
+    public String amount;    // transaction_amount (QP)
     public String rawJson;
     public String qrImage;
     public String qrTemplateDocument;

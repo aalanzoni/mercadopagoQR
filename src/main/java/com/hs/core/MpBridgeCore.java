@@ -314,8 +314,8 @@ public class MpBridgeCore {
             }
 
             JsonObject mp = safeObj(r.body);
-            // MercadoPago Payments suele devolver status y status_detail
             out.status = getJsonStr(mp, "status");
+            out.amount = getJsonStr(mp, "transaction_amount");
             out.msg = "OK";
             return out;
 
@@ -584,8 +584,8 @@ public class MpBridgeCore {
         sb.append("external_reference=").append(url(externalReference.trim()));
         sb.append("&sort=date_created");
         sb.append("&criteria=desc");
-        sb.append("&range=date_created");
         sb.append("&limit=50");
+        sb.append("&offset=0");
 
         try {
             MpHttp.MpHttpResponse r = http.get(sb.toString());

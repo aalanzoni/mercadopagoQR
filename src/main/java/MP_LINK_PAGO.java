@@ -233,7 +233,8 @@ public class MP_LINK_PAGO implements IscobolCall {
         setOut(argv, O_RES, String.valueOf(r != null ? r.res : 9));
         setOut(argv, O_MSG, r != null ? nn(r.msg) : "Respuesta nula");
         setOut(argv, O_PREFERENCE_ID, r != null ? nn(r.preferenceId) : "");
-        setOut(argv, O_PAYMENT_LINK, r != null ? nn(r.paymentLink) : "");
+        setOut(argv, O_PAYMENT_LINK,
+                r != null ? firstNonBlank(r.paymentLink, r.paymentId) : "");
         setOut(argv, O_SANDBOX_LINK, r != null ? nn(r.sandboxPaymentLink) : "");
         setOut(argv, O_RAW_JSON, r != null ? nn(r.rawJson) : "");
         setOut(argv, O_PREF_EXTREF, r != null ? nn(r.preferenceExternalReference) : "");
@@ -386,6 +387,18 @@ public class MP_LINK_PAGO implements IscobolCall {
 
     private String nn(String s) {
         return s == null ? "" : s;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (!isBlank(value)) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private String safeMsg(Exception e) {

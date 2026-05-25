@@ -261,10 +261,11 @@ public class MP_QR_HIBRIDO implements IscobolCall {
             r.paymentId = paymentId;
         }
         if (r != null && isBlank(r.id)) {
-            // por consistencia devolvemos en O_ID el payment_id consultado
             r.id = paymentId;
         }
         MpOutWriter.write(argv, r);
+        // Devuelve el importe abonado en argv[6] (AR-MP-TOTAL-AMOUNT-MPQ)
+        setOut(argv, I_TOTAL, r != null ? r.amount : "");
         return 0;
     }
 
