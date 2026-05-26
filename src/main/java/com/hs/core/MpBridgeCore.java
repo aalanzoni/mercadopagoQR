@@ -145,6 +145,8 @@ public class MpBridgeCore {
             JsonObject mp = safeObj(r.body);
             out.status = getJsonStr(mp, "status");
             out.paymentId = extractPaymentId(mp);
+            // paid_amount del payment dentro de la orden ("123.45")
+            out.amount = extractPaymentInfo(mp).amount;
             out.qrData = extractQrData(mp);
             out.msg = "OK";
             return out;
@@ -992,6 +994,7 @@ public class MpBridgeCore {
 
         String id;
         String status;
+        String amount; // paid_amount con punto decimal: "123.45"
     }
 
     private PaymentInfo extractPaymentInfo(JsonObject mp) {
@@ -1006,6 +1009,9 @@ public class MpBridgeCore {
                 JsonObject p0 = obj(payments.get(0));
                 pi.id = getJsonStr(p0, "id");
                 pi.status = getJsonStr(p0, "status");
+                // paid_amount viene como string con punto decimal: "123.45"
+                // Se devuelve tal cual para que el COBOL lo procese con NUMVAL
+                pi.amount = getJsonStr(p0, "paid_amount");
             }
         } catch (Exception ignored) {
         }

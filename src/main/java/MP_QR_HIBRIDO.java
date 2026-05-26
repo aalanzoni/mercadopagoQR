@@ -231,6 +231,9 @@ public class MP_QR_HIBRIDO implements IscobolCall {
             r.id = orderId;
         }
         MpOutWriter.write(argv, r);
+        // Devuelve el importe abonado en argv[6] (AR-MP-TOTAL-AMOUNT-MPQ)
+        // paid_amount viene como "123.45" (punto decimal explicito)
+        setOut(argv, I_TOTAL, r != null ? r.amount : "");
         return 0;
     }
 
