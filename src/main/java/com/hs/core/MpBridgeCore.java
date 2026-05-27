@@ -102,9 +102,8 @@ public class MpBridgeCore {
             out.rawJson = r.body;
 
             if (r.httpCode < 200 || r.httpCode >= 300) {
-                // create suele devolver 201; si llegamos aquí es error
                 out.res = 5;
-                out.msg = "MP createOrder HTTP " + r.httpCode;
+                out.msg = "MP createOrder HTTP " + r.httpCode + extractErrorDetail(r.body);
                 return out;
             }
 
@@ -1016,6 +1015,26 @@ public class MpBridgeCore {
         } catch (Exception ignored) {
         }
         return pi;
+    }
+
+    private String extractErrorDetail(String body) {
+        try {
+            if (isBlank(body)) return "";
+            JsonObject mp = safeObj(body);
+            if (mp == null) return "";
+            JsonArray errors = arr(mp.get("errors"));
+            if (errors == null || errors.size() == 0) return "";
+            JsonObject err0 = obj(errors.get(0));
+            if (err0 == null) return "";
+            JsonArray details = arr(err0.get("details"));
+            if (details != null && details.size() > 0) {
+                return ": " + details.get(0).getAsString();
+            }
+            String msg = getJsonStr(err0, "message");
+            return isBlank(msg) ? "" : ": " + msg;
+        } catch (Exception ex) {
+            return "";
+        }
     }
 
     private String extractPaymentId(JsonObject mp) {
