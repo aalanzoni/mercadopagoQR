@@ -496,6 +496,7 @@ public class MpBridgeCore {
         body.addProperty("name", in.name.trim());
         body.addProperty("external_id", in.externalId.trim());
         body.addProperty("store_id", in.storeId);
+        body.addProperty("fixed_amount", true);
 
         String idem = isBlank(in.idempotencyKey) ? in.externalId.trim() : in.idempotencyKey.trim();
 
