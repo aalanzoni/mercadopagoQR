@@ -576,6 +576,15 @@ public class MpBridgeCore {
 
         String endpoint = cfg.get("mp.endpoint.searchPayments", "/v1/payments/search");
 
+        // MP exige un rango de fechas (range/begin_date/end_date) al buscar
+        // pagos ordenando por date_created. Ventana configurable (default 400 días).
+        DateTimeFormatter rangeFmt =
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+        ZoneId zone = ZoneId.of("America/Argentina/Cordoba");
+        int windowDays = cfg.getInt("mp.searchPaymentsWindowDays", 400);
+        String endDate = OffsetDateTime.now(zone).plusDays(1).format(rangeFmt);
+        String beginDate = OffsetDateTime.now(zone).minusDays(windowDays).format(rangeFmt);
+
         StringBuilder sb = new StringBuilder(endpoint);
         if (endpoint.contains("?")) {
             sb.append("&");
@@ -585,6 +594,9 @@ public class MpBridgeCore {
         sb.append("external_reference=").append(url(externalReference.trim()));
         sb.append("&sort=date_created");
         sb.append("&criteria=desc");
+        sb.append("&range=date_created");
+        sb.append("&begin_date=").append(url(beginDate));
+        sb.append("&end_date=").append(url(endDate));
         sb.append("&limit=50");
         sb.append("&offset=0");
 
@@ -701,6 +713,62 @@ public class MpBridgeCore {
 
         } catch (Exception ex) {
             return MpResult.error(4, "Error técnico createPaymentLink: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * Vence (anula) una preferencia/link de Checkout Pro.
+     *
+     * Mercado Pago no permite borrar preferencias, pero sí actualizarlas via
+     * PUT /checkout/preferences/{id}. Para inutilizar el link se setea
+     * expires=true y expiration_date_to en el pasado, con lo cual el link
+     * deja de ser pagable.
+     *
+     * IMPORTANTE: este método NO valida si el link ya fue pagado. Esa
+     * verificación se hace antes (queryPaymentLink) en el flujo del WS, que
+     * solo llama a cancelar cuando el link está activo y sin pago.
+     */
+    public MpResult cancelPaymentLink(String preferenceId, String idempotencyKey) {
+        if (isBlank(preferenceId)) {
+            return MpResult.error(4, "Falta preference_id");
+        }
+
+        try {
+            String endpointFmt = cfg.get("mp.endpoint.updatePreference", "/checkout/preferences/%s");
+            String endpoint = String.format(endpointFmt, preferenceId.trim());
+
+            // expiration_date_to en el pasado => link vencido / no pagable.
+            String pastDate = OffsetDateTime.now(ZoneId.of("America/Argentina/Cordoba"))
+                    .minusMinutes(1)
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"));
+
+            JsonObject body = new JsonObject();
+            body.addProperty("expires", true);
+            body.addProperty("expiration_date_to", pastDate);
+
+            String idem = isBlank(idempotencyKey) ? preferenceId.trim() : idempotencyKey.trim();
+            MpHttp.MpHttpResponse r = http.putJson(endpoint, gson.toJson(body), idem);
+
+            MpResult out = MpResult.ok();
+            out.id = preferenceId.trim();
+            out.preferenceId = preferenceId.trim();
+            out.rawJson = r.body;
+
+            if (r.httpCode < 200 || r.httpCode >= 300) {
+                out.res = 5;
+                out.msg = "MP cancelPaymentLink HTTP " + r.httpCode + extractErrorDetail(r.body);
+                out.status = "error";
+                return out;
+            }
+
+            JsonObject mp = safeObj(r.body);
+            out.preferenceExternalReference = getJsonStr(mp, "external_reference");
+            out.status = "expired";
+            out.msg = "VENCIDO";
+            return out;
+
+        } catch (Exception ex) {
+            return MpResult.error(4, "Error técnico cancelPaymentLink: " + ex.getMessage());
         }
     }
 

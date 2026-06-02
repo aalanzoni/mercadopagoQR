@@ -6,6 +6,8 @@ public interface MpHttp {
 
     MpHttpResponse postJson(String endpoint, String jsonBody, String idempotencyKey) throws Exception;
 
+    MpHttpResponse putJson(String endpoint, String jsonBody, String idempotencyKey) throws Exception;
+
     MpHttpResponse delete(String endpoint) throws Exception;
 
     class MpHttpResponse {

@@ -24,6 +24,12 @@ public class MpHttpAdapter implements MpHttp {
     }
 
     @Override
+    public MpHttpResponse putJson(String endpoint, String jsonBody, String idempotencyKey) throws Exception {
+        MpHttpClient.MpHttpResponse r = http.putJson(endpoint, jsonBody, idempotencyKey);
+        return new MpHttpResponse(r.statusCode, r.body);
+    }
+
+    @Override
     public MpHttpResponse delete(String endpoint) throws Exception {
         MpHttpClient.MpHttpResponse r = http.delete(endpoint);
         return new MpHttpResponse(r.statusCode, r.body);
