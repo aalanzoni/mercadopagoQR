@@ -155,7 +155,7 @@ public class MainMpAdminTest {
 //            MpBridgeCore core = new MpBridgeCore(cfg);
             MpBridgeCore core = new MpBridgeCore(cfg, Logger.getLogger("MP_ADMIN_TEST"));
             PaymentLinkIn in = new PaymentLinkIn();
-            in.externalReference = "COB-TEST-20260519-0004";
+            in.externalReference = "PROD-TEST-20260519-0004";
             in.payerName = "Socio de Prueba";
             in.payerEmail = "aalanzoni@gmail.com";
             in.notificationUrl = "";
@@ -164,7 +164,7 @@ public class MainMpAdminTest {
             in.backUrlFailure = "";
             in.expirationDateFrom = "";
             in.expirationDateTo = "";
-            in.idempotencyKey = "IDEMP-COB-TEST-20260519-0004";
+            in.idempotencyKey = "IDEMP-PROD-TEST-20260519-0004";
 
             List<PaymentLinkItemIn> items = new ArrayList<PaymentLinkItemIn>();
 
